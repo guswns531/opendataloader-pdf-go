@@ -1,12 +1,14 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/guswns531/opendataloader-pdf-go/internal/cli/discovery"
+	clioptions "github.com/guswns531/opendataloader-pdf-go/internal/cli/options"
+	"github.com/guswns531/opendataloader-pdf-go/internal/cli/pagerange"
 	"github.com/guswns531/opendataloader-pdf-go/internal/core"
 	"github.com/guswns531/opendataloader-pdf-go/internal/emit/schemajson"
 	"github.com/guswns531/opendataloader-pdf-go/internal/emit/semanticmd"
@@ -23,66 +25,44 @@ func main() {
 }
 
 func run(args []string) int {
-	fs := flag.NewFlagSet("opendataloader-pdf", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-
-	outputDir := fs.String("output-dir", "", "Directory where output files are written.")
-	format := fs.String("format", "json", "Output formats (comma-separated).")
-	useFixture := fs.Bool("fixture", false, "Treat input JSON as a document fixture.")
-	quiet := fs.Bool("quiet", false, "Suppress non-error output.")
-	showVersion := fs.Bool("version", false, "Print version and exit.")
-
-	if err := fs.Parse(args); err != nil {
+	opts, err := clioptions.Parse(args)
+	if err != nil {
 		return 2
 	}
-	if *showVersion {
+	if opts.Version {
 		fmt.Println(version)
 		return 0
 	}
-
-	inputs := fs.Args()
-	if len(inputs) == 0 {
-		printUsage(fs)
+	if len(opts.Inputs) == 0 {
+		printUsage()
 		return 2
 	}
 
-	options := core.ProcessingOptions{
-		InputPath:        inputs[0],
-		OutputPath:       *outputDir,
-		DocumentName:     filepath.Base(inputs[0]),
-		RequestedFormats: parseFormats(*format),
+	inputs, err := discovery.Discover(opts.Inputs)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "input discovery failed: %v\n", err)
+		return 1
+	}
+	if len(inputs) == 0 {
+		fmt.Fprintln(os.Stderr, "no supported input files found")
+		return 1
 	}
 
-	document := model.NewDocument(model.DocumentMetadata{
-		FileName:  options.DocumentName,
-		PageCount: 0,
-	})
-	ctx := core.NewProcessingContext(document, options)
-	pipeline, err := pipelineForInput(inputs[0], *useFixture)
+	pages, err := pagerange.ParseOptional(opts.Pages)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		return 1
+		fmt.Fprintf(os.Stderr, "page parsing failed: %v\n", err)
+		return 2
 	}
-	document, err = pipeline.Run(ctx, core.Source{
-		Path: inputs[0],
-		Name: filepath.Base(inputs[0]),
-	}, nil)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "pipeline failed: %v\n", err)
-		return 1
-	}
-	outputPaths, err := writeOutputs(document, ctx, options)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "writing outputs failed: %v\n", err)
-		return 1
-	}
-	if !*quiet {
-		fmt.Fprintf(os.Stderr, "opendataloader-pdf (pure go skeleton) version %s\n", version)
-		fmt.Fprintf(os.Stderr, "pages=%d artifacts=%d nodes=%d stage=%s\n",
-			len(document.Pages), countArtifacts(document), len(document.Kids), ctx.Stage)
-		if len(outputPaths) > 0 {
-			fmt.Fprintf(os.Stderr, "wrote=%s\n", strings.Join(outputPaths, ","))
+
+	hadFailure := false
+	for _, input := range inputs {
+		if err := processInput(input, opts, pages); err != nil {
+			hadFailure = true
+			fmt.Fprintf(os.Stderr, "%s: %v\n", input, err)
 		}
+	}
+	if hadFailure {
+		return 1
 	}
 	return 0
 }
@@ -98,33 +78,49 @@ func pipelineForInput(path string, useFixture bool) (*local.Pipeline, error) {
 	}
 }
 
-func parseFormats(value string) []core.OutputFormat {
-	if strings.TrimSpace(value) == "" {
-		return []core.OutputFormat{core.OutputFormatJSON}
+func processInput(input string, opts clioptions.Options, pages []int) error {
+	options := opts.ProcessingOptions(input)
+	if len(pages) > 0 {
+		if options.Extras == nil {
+			options.Extras = make(map[string]any)
+		}
+		options.Extras["pages"] = append([]int(nil), pages...)
 	}
 
-	parts := strings.Split(value, ",")
-	formats := make([]core.OutputFormat, 0, len(parts))
-	for _, part := range parts {
-		switch normalized := strings.TrimSpace(part); normalized {
-		case "":
-		case string(core.OutputFormatJSON):
-			formats = append(formats, core.OutputFormatJSON)
-		case string(core.OutputFormatMarkdown):
-			formats = append(formats, core.OutputFormatMarkdown)
-		case string(core.OutputFormatHTML):
-			formats = append(formats, core.OutputFormatHTML)
-		case string(core.OutputFormatText):
-			formats = append(formats, core.OutputFormatText)
+	document := model.NewDocument(model.DocumentMetadata{
+		FileName:  options.DocumentName,
+		PageCount: 0,
+	})
+	ctx := core.NewProcessingContext(document, options)
+	pipeline, err := pipelineForInput(input, opts.Fixture)
+	if err != nil {
+		return err
+	}
+	document, err = pipeline.Run(ctx, core.Source{
+		Path: input,
+		Name: filepath.Base(input),
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("pipeline failed: %w", err)
+	}
+	outputPaths, err := writeOutputs(document, ctx, options)
+	if err != nil {
+		return fmt.Errorf("writing outputs failed: %w", err)
+	}
+	if !opts.Quiet {
+		fmt.Fprintf(os.Stderr, "opendataloader-pdf (pure go skeleton) version %s\n", version)
+		fmt.Fprintf(os.Stderr, "input=%s pages=%d artifacts=%d nodes=%d stage=%s\n",
+			input, len(document.Pages), countArtifacts(document), len(document.Kids), ctx.Stage)
+		if len(outputPaths) > 0 {
+			fmt.Fprintf(os.Stderr, "wrote=%s\n", strings.Join(outputPaths, ","))
 		}
 	}
-	if len(formats) == 0 {
-		return []core.OutputFormat{core.OutputFormatJSON}
-	}
-	return formats
+	return nil
 }
 
-func printUsage(fs *flag.FlagSet) {
+func printUsage() {
+	fs, _ := clioptions.NewFlagSet("opendataloader-pdf")
+	fs.SetOutput(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Usage: opendataloader-pdf [options] <INPUT FILE OR FOLDER>...")
 	fs.PrintDefaults()
 }
