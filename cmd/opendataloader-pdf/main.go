@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/guswns531/opendataloader-pdf-go/internal/core"
-	"github.com/guswns531/opendataloader-pdf-go/internal/emit/jsonout"
-	"github.com/guswns531/opendataloader-pdf-go/internal/emit/markdown"
+	"github.com/guswns531/opendataloader-pdf-go/internal/emit/schemajson"
+	"github.com/guswns531/opendataloader-pdf-go/internal/emit/semanticmd"
 	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/fixture"
 	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/pdftext"
 	"github.com/guswns531/opendataloader-pdf-go/internal/model"
@@ -186,9 +186,9 @@ func emittersForFormats(formats []core.OutputFormat) ([]core.Emitter, error) {
 	for _, format := range formats {
 		switch format {
 		case core.OutputFormatJSON:
-			emitters = append(emitters, jsonout.New())
+			emitters = append(emitters, schemajson.New())
 		case core.OutputFormatMarkdown:
-			emitters = append(emitters, markdown.New())
+			emitters = append(emitters, semanticmd.New())
 		case core.OutputFormatHTML, core.OutputFormatText:
 			return nil, fmt.Errorf("format %q is not implemented in the pure go skeleton", format)
 		default:
@@ -196,7 +196,7 @@ func emittersForFormats(formats []core.OutputFormat) ([]core.Emitter, error) {
 		}
 	}
 	if len(emitters) == 0 {
-		emitters = append(emitters, jsonout.New())
+		emitters = append(emitters, schemajson.New())
 	}
 	return emitters, nil
 }
