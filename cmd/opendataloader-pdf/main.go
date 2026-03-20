@@ -11,6 +11,7 @@ import (
 	"github.com/guswns531/opendataloader-pdf-go/internal/emit/jsonout"
 	"github.com/guswns531/opendataloader-pdf-go/internal/emit/markdown"
 	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/fixture"
+	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/pdftext"
 	"github.com/guswns531/opendataloader-pdf-go/internal/model"
 	"github.com/guswns531/opendataloader-pdf-go/internal/pipeline/local"
 )
@@ -57,34 +58,44 @@ func run(args []string) int {
 		PageCount: 0,
 	})
 	ctx := core.NewProcessingContext(document, options)
-	if *useFixture || strings.EqualFold(filepath.Ext(inputs[0]), ".json") {
-		pipeline := local.New(fixture.New())
-		document, err := pipeline.Run(ctx, core.Source{
-			Path: inputs[0],
-			Name: filepath.Base(inputs[0]),
-		}, nil)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "fixture pipeline failed: %v\n", err)
-			return 1
-		}
-		outputPaths, err := writeOutputs(document, ctx, options)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "writing outputs failed: %v\n", err)
-			return 1
-		}
-		if !*quiet {
-			fmt.Fprintf(os.Stderr, "opendataloader-pdf (pure go skeleton) version %s\n", version)
-			fmt.Fprintf(os.Stderr, "pages=%d artifacts=%d nodes=%d stage=%s\n",
-				len(document.Pages), countArtifacts(document), len(document.Kids), ctx.Stage)
-			if len(outputPaths) > 0 {
-				fmt.Fprintf(os.Stderr, "wrote=%s\n", strings.Join(outputPaths, ","))
-			}
-		}
-		return 0
+	pipeline, err := pipelineForInput(inputs[0], *useFixture)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return 1
 	}
+	document, err = pipeline.Run(ctx, core.Source{
+		Path: inputs[0],
+		Name: filepath.Base(inputs[0]),
+	}, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "pipeline failed: %v\n", err)
+		return 1
+	}
+	outputPaths, err := writeOutputs(document, ctx, options)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "writing outputs failed: %v\n", err)
+		return 1
+	}
+	if !*quiet {
+		fmt.Fprintf(os.Stderr, "opendataloader-pdf (pure go skeleton) version %s\n", version)
+		fmt.Fprintf(os.Stderr, "pages=%d artifacts=%d nodes=%d stage=%s\n",
+			len(document.Pages), countArtifacts(document), len(document.Kids), ctx.Stage)
+		if len(outputPaths) > 0 {
+			fmt.Fprintf(os.Stderr, "wrote=%s\n", strings.Join(outputPaths, ","))
+		}
+	}
+	return 0
+}
 
-	fmt.Fprintln(os.Stderr, "pure go core skeleton: PDF ingestion pipeline not implemented yet")
-	return 1
+func pipelineForInput(path string, useFixture bool) (*local.Pipeline, error) {
+	switch {
+	case useFixture, strings.EqualFold(filepath.Ext(path), ".json"):
+		return local.New(fixture.New()), nil
+	case strings.EqualFold(filepath.Ext(path), ".pdf"):
+		return local.New(pdftext.New()), nil
+	default:
+		return nil, fmt.Errorf("unsupported input type for %q", path)
+	}
 }
 
 func parseFormats(value string) []core.OutputFormat {

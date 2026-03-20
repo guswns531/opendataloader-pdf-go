@@ -106,3 +106,21 @@ func TestRunFixtureWritesRequestedOutputs(t *testing.T) {
 		}
 	}
 }
+
+func TestRunPDFWritesJSONOutput(t *testing.T) {
+	outputDir := t.TempDir()
+	inputPath := filepath.Clean("../../samples/pdf/lorem.pdf")
+
+	if got := run([]string{
+		"--quiet",
+		"--output-dir", outputDir,
+		inputPath,
+	}); got != 0 {
+		t.Fatalf("run() = %d, want 0", got)
+	}
+
+	outputPath := filepath.Join(outputDir, "lorem.json")
+	if _, err := os.Stat(outputPath); err != nil {
+		t.Fatalf("expected output file %s: %v", outputPath, err)
+	}
+}
