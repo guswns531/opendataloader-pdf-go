@@ -65,3 +65,64 @@ func TestPipelineBuildsParagraphsFromArtifactsAndSorts(t *testing.T) {
 		t.Fatalf("first paragraph content = %q, want %q", first.Content, "First")
 	}
 }
+
+func TestPipelinePromotesHeadingsAndBuildsLists(t *testing.T) {
+	const fixtureJSON = `{
+	  "metadata": {"file_name": "fixture.json", "page_count": 1},
+	  "pages": [
+	    {
+	      "metadata": {"number": 1, "index": 0},
+	      "kids": [
+	        {
+	          "type": "paragraph",
+	          "page_index": 0,
+	          "page_number": 1,
+	          "bounds": {"left": 20, "bottom": 700, "right": 260, "top": 724},
+	          "font_size": 20,
+	          "bold": true,
+	          "content": "INTRODUCTION"
+	        },
+	        {
+	          "type": "paragraph",
+	          "page_index": 0,
+	          "page_number": 1,
+	          "bounds": {"left": 40, "bottom": 640, "right": 260, "top": 652},
+	          "content": "- first item"
+	        },
+	        {
+	          "type": "paragraph",
+	          "page_index": 0,
+	          "page_number": 1,
+	          "bounds": {"left": 40, "bottom": 620, "right": 260, "top": 632},
+	          "content": "- second item"
+	        }
+	      ]
+	    }
+	  ]
+	}`
+
+	pipeline := New(fixture.New())
+	ctx := core.NewProcessingContext(nil, core.ProcessingOptions{})
+
+	document, err := pipeline.Run(ctx, core.Source{
+		Name:   "fixture.json",
+		Reader: strings.NewReader(fixtureJSON),
+	}, nil)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(document.Kids) != 2 {
+		t.Fatalf("len(document.Kids) = %d, want 2", len(document.Kids))
+	}
+
+	if _, ok := document.Kids[0].(*model.Heading); !ok {
+		t.Fatalf("first node type = %T, want *model.Heading", document.Kids[0])
+	}
+	listNode, ok := document.Kids[1].(*model.List)
+	if !ok {
+		t.Fatalf("second node type = %T, want *model.List", document.Kids[1])
+	}
+	if listNode.NumberOfItems != 2 {
+		t.Fatalf("list item count = %d, want 2", listNode.NumberOfItems)
+	}
+}

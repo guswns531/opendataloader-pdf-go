@@ -5,6 +5,9 @@ import (
 	"io"
 
 	"github.com/guswns531/opendataloader-pdf-go/internal/core"
+	"github.com/guswns531/opendataloader-pdf-go/internal/heuristics/heading"
+	"github.com/guswns531/opendataloader-pdf-go/internal/heuristics/lists"
+	"github.com/guswns531/opendataloader-pdf-go/internal/heuristics/paragraph"
 	"github.com/guswns531/opendataloader-pdf-go/internal/heuristics/readingorder"
 	textheur "github.com/guswns531/opendataloader-pdf-go/internal/heuristics/text"
 	"github.com/guswns531/opendataloader-pdf-go/internal/model"
@@ -38,7 +41,9 @@ func (p *Pipeline) Run(ctx *core.ProcessingContext, source core.Source, emitter 
 	ctx.SetDocument(document)
 
 	ctx.SetStage(core.StageHeuristics)
-	applyTextGrouping(document)
+	applyParagraphAssembly(document)
+	applyHeadingDetection(document)
+	applyListDetection(document)
 	applyReadingOrder(document)
 	rebuildDocumentKids(document)
 
@@ -52,7 +57,7 @@ func (p *Pipeline) Run(ctx *core.ProcessingContext, source core.Source, emitter 
 	return document, nil
 }
 
-func applyTextGrouping(document *model.Document) {
+func applyParagraphAssembly(document *model.Document) {
 	if document == nil {
 		return
 	}
@@ -62,25 +67,56 @@ func applyTextGrouping(document *model.Document) {
 			continue
 		}
 
-		paragraphs := textheur.GroupArtifactsToParagraphs(page.Artifacts)
+		grouped := textheur.GroupArtifactsToParagraphs(page.Artifacts)
+		paragraphs := paragraph.Assemble(document, grouped)
 		page.Kids = make([]model.ContentElement, 0, len(paragraphs))
-		for _, paragraph := range paragraphs {
-			id := document.NewNodeID()
-			page.Kids = append(page.Kids, &model.Paragraph{
-				TextNode: model.TextNode{
-					BaseNode: model.BaseNode{
-						ID:         id,
-						Type:       model.ElementTypeParagraph,
-						PageIndex:  paragraph.PageIndex,
-						PageNumber: paragraph.PageNumber,
-						Bounds:     paragraph.Bounds,
-					},
-					TextProperties: model.TextProperties{
-						Content: paragraph.Text,
-					},
-				},
-			})
+		for _, node := range paragraphs {
+			page.Kids = append(page.Kids, node)
 		}
+	}
+}
+
+func applyHeadingDetection(document *model.Document) {
+	if document == nil {
+		return
+	}
+
+	for _, page := range document.Pages {
+		if page == nil || len(page.Kids) == 0 {
+			continue
+		}
+
+		detections := heading.Detect(page.Kids)
+		if len(detections) == 0 {
+			continue
+		}
+
+		replacements := make(map[model.ContentElement]model.ContentElement, len(detections))
+		for _, detection := range detections {
+			if detection.Source == nil || detection.Heading == nil {
+				continue
+			}
+			replacements[detection.Source] = detection.Heading
+		}
+
+		for i, element := range page.Kids {
+			if replacement, ok := replacements[element]; ok {
+				page.Kids[i] = replacement
+			}
+		}
+	}
+}
+
+func applyListDetection(document *model.Document) {
+	if document == nil {
+		return
+	}
+
+	for _, page := range document.Pages {
+		if page == nil || len(page.Kids) == 0 {
+			continue
+		}
+		page.Kids = lists.Detect(page.Kids)
 	}
 }
 
