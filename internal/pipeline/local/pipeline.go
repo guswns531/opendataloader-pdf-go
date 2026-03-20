@@ -5,10 +5,12 @@ import (
 	"io"
 
 	"github.com/guswns531/opendataloader-pdf-go/internal/core"
+	"github.com/guswns531/opendataloader-pdf-go/internal/heuristics/headerfooter"
 	"github.com/guswns531/opendataloader-pdf-go/internal/heuristics/heading"
 	"github.com/guswns531/opendataloader-pdf-go/internal/heuristics/lists"
 	"github.com/guswns531/opendataloader-pdf-go/internal/heuristics/paragraph"
 	"github.com/guswns531/opendataloader-pdf-go/internal/heuristics/readingorder"
+	"github.com/guswns531/opendataloader-pdf-go/internal/heuristics/table"
 	textheur "github.com/guswns531/opendataloader-pdf-go/internal/heuristics/text"
 	"github.com/guswns531/opendataloader-pdf-go/internal/model"
 )
@@ -42,7 +44,9 @@ func (p *Pipeline) Run(ctx *core.ProcessingContext, source core.Source, emitter 
 
 	ctx.SetStage(core.StageHeuristics)
 	applyParagraphAssembly(document)
+	applyHeaderFooterFiltering(document)
 	applyHeadingDetection(document)
+	applyTableDetection(document)
 	applyListDetection(document)
 	applyReadingOrder(document)
 	rebuildDocumentKids(document)
@@ -104,6 +108,27 @@ func applyHeadingDetection(document *model.Document) {
 				page.Kids[i] = replacement
 			}
 		}
+	}
+}
+
+func applyHeaderFooterFiltering(document *model.Document) {
+	if document == nil {
+		return
+	}
+	detector := headerfooter.NewDetector()
+	detector.Apply(document, headerfooter.ModeRemove)
+}
+
+func applyTableDetection(document *model.Document) {
+	if document == nil {
+		return
+	}
+
+	for _, page := range document.Pages {
+		if page == nil || len(page.Kids) == 0 {
+			continue
+		}
+		page.Kids = table.Detect(page.Kids)
 	}
 }
 

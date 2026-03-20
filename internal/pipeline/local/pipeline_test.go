@@ -126,3 +126,72 @@ func TestPipelinePromotesHeadingsAndBuildsLists(t *testing.T) {
 		t.Fatalf("list item count = %d, want 2", listNode.NumberOfItems)
 	}
 }
+
+func TestPipelineRemovesRepeatedHeadersAcrossPages(t *testing.T) {
+	const fixtureJSON = `{
+	  "metadata": {"file_name": "fixture.json", "page_count": 2},
+	  "pages": [
+	    {
+	      "metadata": {"number": 1, "index": 0, "size": {"width": 600, "height": 800}},
+	      "kids": [
+	        {
+	          "type": "paragraph",
+	          "page_index": 0,
+	          "page_number": 1,
+	          "bounds": {"left": 40, "bottom": 770, "right": 180, "top": 790},
+	          "content": "Company Report"
+	        },
+	        {
+	          "type": "paragraph",
+	          "page_index": 0,
+	          "page_number": 1,
+	          "bounds": {"left": 40, "bottom": 700, "right": 260, "top": 720},
+	          "content": "Body page one"
+	        }
+	      ]
+	    },
+	    {
+	      "metadata": {"number": 2, "index": 1, "size": {"width": 600, "height": 800}},
+	      "kids": [
+	        {
+	          "type": "paragraph",
+	          "page_index": 1,
+	          "page_number": 2,
+	          "bounds": {"left": 40, "bottom": 770, "right": 180, "top": 790},
+	          "content": "Company Report"
+	        },
+	        {
+	          "type": "paragraph",
+	          "page_index": 1,
+	          "page_number": 2,
+	          "bounds": {"left": 40, "bottom": 700, "right": 260, "top": 720},
+	          "content": "Body page two"
+	        }
+	      ]
+	    }
+	  ]
+	}`
+
+	pipeline := New(fixture.New())
+	ctx := core.NewProcessingContext(nil, core.ProcessingOptions{})
+
+	document, err := pipeline.Run(ctx, core.Source{
+		Name:   "fixture.json",
+		Reader: strings.NewReader(fixtureJSON),
+	}, nil)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(document.Kids) != 2 {
+		t.Fatalf("len(document.Kids) = %d, want 2", len(document.Kids))
+	}
+	for i, element := range document.Kids {
+		para, ok := element.(*model.Paragraph)
+		if !ok {
+			t.Fatalf("document.Kids[%d] type = %T, want *model.Paragraph", i, element)
+		}
+		if strings.Contains(para.Content, "Company Report") {
+			t.Fatalf("header text should have been removed, got %q", para.Content)
+		}
+	}
+}
