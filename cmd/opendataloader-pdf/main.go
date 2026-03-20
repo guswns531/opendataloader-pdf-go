@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/guswns531/opendataloader-pdf-go/internal/core"
+	"github.com/guswns531/opendataloader-pdf-go/internal/emit/jsonout"
+	"github.com/guswns531/opendataloader-pdf-go/internal/emit/markdown"
 	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/fixture"
 	"github.com/guswns531/opendataloader-pdf-go/internal/model"
 	"github.com/guswns531/opendataloader-pdf-go/internal/pipeline/local"
@@ -65,10 +67,18 @@ func run(args []string) int {
 			fmt.Fprintf(os.Stderr, "fixture pipeline failed: %v\n", err)
 			return 1
 		}
+		outputPaths, err := writeOutputs(document, ctx, options)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "writing outputs failed: %v\n", err)
+			return 1
+		}
 		if !*quiet {
 			fmt.Fprintf(os.Stderr, "opendataloader-pdf (pure go skeleton) version %s\n", version)
 			fmt.Fprintf(os.Stderr, "pages=%d artifacts=%d nodes=%d stage=%s\n",
 				len(document.Pages), countArtifacts(document), len(document.Kids), ctx.Stage)
+			if len(outputPaths) > 0 {
+				fmt.Fprintf(os.Stderr, "wrote=%s\n", strings.Join(outputPaths, ","))
+			}
 		}
 		return 0
 	}
@@ -119,4 +129,76 @@ func countArtifacts(document *model.Document) int {
 		}
 	}
 	return total
+}
+
+func writeOutputs(document *model.Document, ctx *core.ProcessingContext, options core.ProcessingOptions) ([]string, error) {
+	emitters, err := emittersForFormats(options.RequestedFormats)
+	if err != nil {
+		return nil, err
+	}
+
+	outputDir := options.OutputPath
+	if outputDir == "" {
+		outputDir = filepath.Dir(options.InputPath)
+	}
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		return nil, err
+	}
+
+	baseName := strings.TrimSuffix(options.DocumentName, filepath.Ext(options.DocumentName))
+	if baseName == "" {
+		baseName = "output"
+	}
+
+	written := make([]string, 0, len(emitters))
+	for _, emitter := range emitters {
+		path := filepath.Join(outputDir, baseName+extensionForFormat(emitter.Format()))
+		file, err := os.Create(path)
+		if err != nil {
+			return nil, err
+		}
+		if emitErr := emitter.Emit(ctx, document, file); emitErr != nil {
+			_ = file.Close()
+			return nil, emitErr
+		}
+		if closeErr := file.Close(); closeErr != nil {
+			return nil, closeErr
+		}
+		written = append(written, path)
+	}
+
+	return written, nil
+}
+
+func emittersForFormats(formats []core.OutputFormat) ([]core.Emitter, error) {
+	emitters := make([]core.Emitter, 0, len(formats))
+	for _, format := range formats {
+		switch format {
+		case core.OutputFormatJSON:
+			emitters = append(emitters, jsonout.New())
+		case core.OutputFormatMarkdown:
+			emitters = append(emitters, markdown.New())
+		case core.OutputFormatHTML, core.OutputFormatText:
+			return nil, fmt.Errorf("format %q is not implemented in the pure go skeleton", format)
+		default:
+			return nil, fmt.Errorf("unsupported format %q", format)
+		}
+	}
+	if len(emitters) == 0 {
+		emitters = append(emitters, jsonout.New())
+	}
+	return emitters, nil
+}
+
+func extensionForFormat(format core.OutputFormat) string {
+	switch format {
+	case core.OutputFormatMarkdown:
+		return ".md"
+	case core.OutputFormatHTML:
+		return ".html"
+	case core.OutputFormatText:
+		return ".txt"
+	default:
+		return ".json"
+	}
 }

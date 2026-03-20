@@ -62,3 +62,47 @@ func TestRunFixtureMode(t *testing.T) {
 		t.Fatalf("run() = %d, want 0", got)
 	}
 }
+
+func TestRunFixtureWritesRequestedOutputs(t *testing.T) {
+	dir := t.TempDir()
+	fixturePath := filepath.Join(dir, "fixture_input.json")
+	outputDir := filepath.Join(dir, "out")
+	const fixtureJSON = `{
+	  "metadata": {"file_name": "fixture_input.json", "page_count": 1},
+	  "pages": [
+	    {
+	      "metadata": {"number": 1, "index": 0},
+	      "artifacts": [
+	        {
+	          "kind": "text",
+	          "page_index": 0,
+	          "page_number": 1,
+	          "sequence": 0,
+	          "bounds": {"left": 0, "bottom": 90, "right": 40, "top": 100},
+	          "text": "Hello fixture"
+	        }
+	      ]
+	    }
+	  ]
+	}`
+	if err := os.WriteFile(fixturePath, []byte(fixtureJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if got := run([]string{
+		"--fixture",
+		"--quiet",
+		"--output-dir", outputDir,
+		"--format", "json,markdown",
+		fixturePath,
+	}); got != 0 {
+		t.Fatalf("run() = %d, want 0", got)
+	}
+
+	for _, name := range []string{"fixture_input.json", "fixture_input.md"} {
+		path := filepath.Join(outputDir, name)
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected output file %s: %v", path, err)
+		}
+	}
+}
