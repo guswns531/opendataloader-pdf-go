@@ -1,0 +1,54 @@
+{
+  "metadata": {
+    "file_name": "basic.json",
+    "title": "Basic Fixture",
+    "page_count": 1
+  },
+  "pages": [
+    {
+      "metadata": {
+        "index": 0,
+        "number": 1,
+        "label": "1",
+        "size": {
+          "width": 595,
+          "height": 842
+        },
+        "bounds": {
+          "left": 0,
+          "bottom": 0,
+          "right": 595,
+          "top": 842
+        }
+      },
+      "artifacts": [
+        {
+          "kind": "text",
+          "page_index": 0,
+          "page_number": 1,
+          "sequence": 0,
+          "bounds": {
+            "left": 40,
+            "bottom": 700,
+            "right": 180,
+            "top": 716
+          },
+          "text": "Pure Go fixture paragraph one."
+        },
+        {
+          "kind": "text",
+          "page_index": 0,
+          "page_number": 1,
+          "sequence": 1,
+          "bounds": {
+            "left": 40,
+            "bottom": 680,
+            "right": 220,
+            "top": 696
+          },
+          "text": "Second paragraph placed lower on the page."
+        }
+      ]
+    }
+  ]
+}
