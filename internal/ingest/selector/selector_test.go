@@ -103,6 +103,29 @@ func TestResolveErrorsWhenDependencyMissing(t *testing.T) {
 	}
 }
 
+func TestNewCanOptIntoNativeSkeletonPDFBackend(t *testing.T) {
+	t.Setenv("OPENDATALOADER_GO_PDF_BACKEND", "native-skeleton")
+
+	ingestor, err := New().Resolve("sample.pdf", false)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+
+	document, err := ingestor.Ingest(nil, core.Source{
+		Name:   "sample.pdf",
+		Reader: strings.NewReader("%PDF-1.7\n1 0 obj << /Type /Page /MediaBox [0 0 612 792] >> endobj\n(Env Native Skeleton)\n"),
+	})
+	if err != nil {
+		t.Fatalf("Ingest() error = %v", err)
+	}
+	if len(document.Pages) != 1 {
+		t.Fatalf("len(document.Pages) = %d, want 1", len(document.Pages))
+	}
+	if len(document.Pages[0].Artifacts) != 1 {
+		t.Fatalf("len(document.Pages[0].Artifacts) = %d, want 1", len(document.Pages[0].Artifacts))
+	}
+}
+
 type stubIngestor struct {
 	name string
 }

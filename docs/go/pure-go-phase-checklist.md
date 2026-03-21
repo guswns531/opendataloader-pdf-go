@@ -122,3 +122,4 @@
 - [x] `phase-1: derive initial page shells from raw pdf bytes in the skeleton loader`
 - [x] `phase-1: derive first text artifact shells from raw pdf bytes`
 - [x] `phase-1: scan flate streams for first-pass Tj/TJ text shells`
+- [x] `phase-1: add opt-in native-skeleton pdf runtime path`

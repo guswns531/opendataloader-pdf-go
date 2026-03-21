@@ -2,6 +2,7 @@ package selector
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -26,7 +27,7 @@ func New() Selector {
 	return Selector{
 		SemanticFixture: fixture.New(),
 		NativeFixture:   nativepdf.NewIngestor(nativepdf.NewFixtureLoader()),
-		NativePDF:       nativepdf.NewIngestor(nativepdf.NewUnavailableLoader()),
+		NativePDF:       defaultNativePDFIngestor(),
 		PDFBridge:       TemporaryPDFBridge(),
 	}
 }
@@ -56,4 +57,13 @@ func (s Selector) Resolve(path string, useFixture bool) (core.Ingestor, error) {
 // inputs. This must be replaced by a real native parser backend.
 func TemporaryPDFBridge() core.Ingestor {
 	return pdfbridge.New()
+}
+
+func defaultNativePDFIngestor() core.Ingestor {
+	switch strings.TrimSpace(strings.ToLower(os.Getenv("OPENDATALOADER_GO_PDF_BACKEND"))) {
+	case "native-skeleton":
+		return nativepdf.NewIngestor(nativepdf.NewSkeletonLoader())
+	default:
+		return nativepdf.NewIngestor(nativepdf.NewUnavailableLoader())
+	}
 }
