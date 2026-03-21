@@ -47,6 +47,46 @@ func TestDetectRejectsLongPlainParagraph(t *testing.T) {
 	}
 }
 
+func TestDetectRejectsSentenceLikeParagraphWithHeadingStyling(t *testing.T) {
+	elements := []model.ContentElement{
+		paragraph(1, "Document Title", 22, true, model.NewBox(48, 760, 360, 792)),
+		paragraph(2, "Important note for readers.", 16, true, model.NewBox(48, 714, 320, 736)),
+		paragraph(3, "This is a supporting body paragraph that should remain untouched by the heading detector.", 10, false, model.NewBox(48, 650, 520, 670)),
+	}
+
+	detections := Detect(elements)
+	if got, want := len(detections), 1; got != want {
+		t.Fatalf("detections = %d, want %d", got, want)
+	}
+	if got := detections[0].Heading.Content; got != "Document Title" {
+		t.Fatalf("detected heading = %q, want %q", got, "Document Title")
+	}
+}
+
+func TestDetectAssignsSameLevelToSameSizeHeadings(t *testing.T) {
+	elements := []model.ContentElement{
+		paragraph(1, "Document Title", 24, true, model.NewBox(48, 760, 380, 792)),
+		paragraph(2, "1. Overview", 17, false, model.NewBox(48, 716, 210, 736)),
+		paragraph(3, "Details", 17, true, model.NewBox(48, 680, 220, 700)),
+		paragraph(4, "This is a longer body paragraph with no heading cues and should not be detected.", 10, false, model.NewBox(48, 620, 520, 640)),
+		paragraph(5, "Another ordinary paragraph that should keep the body font dominant on the page.", 10, false, model.NewBox(48, 580, 520, 600)),
+	}
+
+	detections := Detect(elements)
+	if got, want := len(detections), 3; got != want {
+		t.Fatalf("detections = %d, want %d", got, want)
+	}
+
+	byText := map[string]Detection{}
+	for _, detection := range detections {
+		byText[detection.Heading.Content] = detection
+	}
+
+	assertLevel(t, byText, "Document Title", 1)
+	assertLevel(t, byText, "1. Overview", 2)
+	assertLevel(t, byText, "Details", 2)
+}
+
 func assertLevel(t *testing.T, byText map[string]Detection, text string, want int) {
 	t.Helper()
 	detection, ok := byText[text]

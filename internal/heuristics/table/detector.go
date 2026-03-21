@@ -4,6 +4,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/guswns531/opendataloader-pdf-go/internal/model"
 )
@@ -170,6 +171,10 @@ func (d Detector) transformRun(raw []model.ContentElement, run []cellCandidate) 
 	columnTol := d.columnTolerance(run)
 	start, end, ok := d.bestTableSpan(rows, columnTol)
 	if !ok {
+		return append([]model.ContentElement(nil), raw...)
+	}
+
+	if !looksTableLike(rows[start : end+1]) {
 		return append([]model.ContentElement(nil), raw...)
 	}
 
@@ -501,4 +506,97 @@ func medianFloat(values []float64) float64 {
 
 func floatEqual(a, b float64) bool {
 	return math.Abs(a-b) <= 0.01
+}
+
+func looksTableLike(rows []rowCluster) bool {
+	cellCount := 0
+	shortCellCount := 0
+	sentenceLikeCount := 0
+	totalWords := 0
+
+	for _, row := range rows {
+		for _, item := range row.items {
+			text := strings.TrimSpace(item.text)
+			if text == "" {
+				continue
+			}
+
+			words := len(strings.Fields(text))
+			totalWords += words
+			cellCount++
+
+			if isShortTableCell(text, words) {
+				shortCellCount++
+			}
+			if isSentenceLikeCell(text, words) {
+				sentenceLikeCount++
+			}
+		}
+	}
+
+	if cellCount == 0 {
+		return false
+	}
+
+	avgWords := float64(totalWords) / float64(cellCount)
+	if avgWords > 8 {
+		return false
+	}
+
+	if sentenceLikeCount >= max(1, cellCount/2) {
+		return false
+	}
+
+	requiredShortCells := 1
+	if len(rows) <= 2 {
+		requiredShortCells = 2
+	} else if cellCount >= 6 {
+		requiredShortCells = cellCount / 3
+	}
+	if shortCellCount < requiredShortCells {
+		return false
+	}
+
+	return true
+}
+
+func isShortTableCell(text string, wordCount int) bool {
+	if wordCount <= 3 {
+		return true
+	}
+	if len(text) <= 24 {
+		return true
+	}
+	return containsDigit(text)
+}
+
+func isSentenceLikeCell(text string, wordCount int) bool {
+	if wordCount >= 8 {
+		return true
+	}
+	if text == "" {
+		return false
+	}
+	last := text[len(text)-1]
+	switch last {
+	case '.', '!', '?':
+		return true
+	}
+	return false
+}
+
+func containsDigit(text string) bool {
+	for _, r := range text {
+		if unicode.IsDigit(r) {
+			return true
+		}
+	}
+	return false
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

@@ -267,3 +267,50 @@ func TestRunAppliesSanitizeAndTextCleanup(t *testing.T) {
 		t.Fatalf("expected sanitized and cleaned content, got %q", text)
 	}
 }
+
+func TestRunCanKeepHeaderFooterWhenRequested(t *testing.T) {
+	dir := t.TempDir()
+	fixturePath := filepath.Join(dir, "headers.json")
+	outputDir := filepath.Join(dir, "out")
+	const fixtureJSON = `{
+	  "metadata": {"file_name": "headers.json", "page_count": 2},
+	  "pages": [
+	    {
+	      "metadata": {"number": 1, "index": 0, "size": {"width": 600, "height": 800}},
+	      "kids": [
+	        {"type": "paragraph", "page_index": 0, "page_number": 1, "bounds": {"left": 40, "bottom": 770, "right": 180, "top": 790}, "content": "Company Report"},
+	        {"type": "paragraph", "page_index": 0, "page_number": 1, "bounds": {"left": 40, "bottom": 700, "right": 260, "top": 720}, "content": "Body page one"}
+	      ]
+	    },
+	    {
+	      "metadata": {"number": 2, "index": 1, "size": {"width": 600, "height": 800}},
+	      "kids": [
+	        {"type": "paragraph", "page_index": 1, "page_number": 2, "bounds": {"left": 40, "bottom": 770, "right": 180, "top": 790}, "content": "Company Report"},
+	        {"type": "paragraph", "page_index": 1, "page_number": 2, "bounds": {"left": 40, "bottom": 700, "right": 260, "top": 720}, "content": "Body page two"}
+	      ]
+	    }
+	  ]
+	}`
+	if err := os.WriteFile(fixturePath, []byte(fixtureJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if got := run([]string{
+		"--quiet",
+		"--output-dir", outputDir,
+		"--include-header-footer",
+		"--format", "text",
+		fixturePath,
+	}); got != 0 {
+		t.Fatalf("run() = %d, want 0", got)
+	}
+
+	outputPath := filepath.Join(outputDir, "headers.txt")
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", outputPath, err)
+	}
+	if !strings.Contains(string(content), "Company Report") {
+		t.Fatalf("expected header/footer content to remain when requested: %s", content)
+	}
+}

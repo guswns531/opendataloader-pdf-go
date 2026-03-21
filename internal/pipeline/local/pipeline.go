@@ -3,7 +3,6 @@ package local
 import (
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/guswns531/opendataloader-pdf-go/internal/core"
 	"github.com/guswns531/opendataloader-pdf-go/internal/filter/layout"
@@ -17,6 +16,7 @@ import (
 	"github.com/guswns531/opendataloader-pdf-go/internal/heuristics/table"
 	textheur "github.com/guswns531/opendataloader-pdf-go/internal/heuristics/text"
 	"github.com/guswns531/opendataloader-pdf-go/internal/model"
+	"github.com/guswns531/opendataloader-pdf-go/internal/pipeline/control"
 )
 
 // Pipeline is a minimal local pipeline that can ingest document fixtures,
@@ -47,15 +47,22 @@ func (p *Pipeline) Run(ctx *core.ProcessingContext, source core.Source, emitter 
 	ctx.SetDocument(document)
 
 	ctx.SetStage(core.StageHeuristics)
-	applyPreFilters(document, ctx.Options)
+	decisions := control.Resolve(ctx.Options)
+	applyPreFilters(document, decisions)
 	applyParagraphAssembly(document)
-	applyHeaderFooterFiltering(document)
+	if !decisions.HeaderFooterIncluded {
+		applyHeaderFooterFiltering(document)
+	}
 	applyHeadingDetection(document)
-	applyTableDetection(document)
+	if decisions.TableHeuristicsEnabled {
+		applyTableDetection(document)
+	}
 	applyListDetection(document)
-	applyReadingOrder(document)
+	if decisions.ReadingOrderEnabled {
+		applyReadingOrder(document)
+	}
 	rebuildDocumentKids(document)
-	applyPostFilters(document, ctx.Options)
+	applyPostFilters(document, decisions)
 
 	if emitter != nil {
 		ctx.SetStage(core.StageEmission)
@@ -67,24 +74,26 @@ func (p *Pipeline) Run(ctx *core.ProcessingContext, source core.Source, emitter 
 	return document, nil
 }
 
-func applyPreFilters(document *model.Document, options core.ProcessingOptions) {
+func applyPreFilters(document *model.Document, decisions control.Decisions) {
 	if document == nil {
 		return
 	}
 
-	replacement := extrasString(options.Extras, "replace_invalid", " ")
-	textclean.New(replacement).Document(document)
+	if decisions.SanitizeEnabled {
+		_ = sanitize.Apply(document)
+	}
+	textclean.New(decisions.ReplaceInvalidChars).Document(document)
 
-	if layoutFilteringEnabled(extrasString(options.Extras, "content_safety_off", "")) {
+	if decisions.LayoutFilteringEnabled {
 		_ = layout.Apply(document)
 	}
 }
 
-func applyPostFilters(document *model.Document, options core.ProcessingOptions) {
+func applyPostFilters(document *model.Document, decisions control.Decisions) {
 	if document == nil {
 		return
 	}
-	if extrasBool(options.Extras, "sanitize") {
+	if decisions.SanitizeEnabled {
 		_ = sanitize.Apply(document)
 	}
 }
@@ -196,47 +205,4 @@ func rebuildDocumentKids(document *model.Document) {
 		}
 		document.Kids = append(document.Kids, page.Kids...)
 	}
-}
-
-func extrasBool(extras map[string]any, key string) bool {
-	if extras == nil {
-		return false
-	}
-	value, ok := extras[key]
-	if !ok {
-		return false
-	}
-	boolean, ok := value.(bool)
-	return ok && boolean
-}
-
-func extrasString(extras map[string]any, key, fallback string) string {
-	if extras == nil {
-		return fallback
-	}
-	value, ok := extras[key]
-	if !ok {
-		return fallback
-	}
-	text, ok := value.(string)
-	if !ok {
-		return fallback
-	}
-	if text == "" {
-		return fallback
-	}
-	return text
-}
-
-func layoutFilteringEnabled(spec string) bool {
-	if strings.TrimSpace(spec) == "" {
-		return true
-	}
-	for _, token := range strings.Split(spec, ",") {
-		switch strings.TrimSpace(strings.ToLower(token)) {
-		case "all", "off-page", "tiny":
-			return false
-		}
-	}
-	return true
 }

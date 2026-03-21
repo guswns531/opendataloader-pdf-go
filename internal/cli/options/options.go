@@ -149,6 +149,11 @@ func (o Options) ProcessingOptions(inputPath string) core.ProcessingOptions {
 		"replace_invalid":       o.ReplaceInvalidChars,
 		"content_safety_off":    o.ContentSafetyOff,
 		"include_header_footer": o.IncludeHeaderFooter,
+		"reading_order":         o.ReadingOrder,
+		"table_method":          o.TableMethod,
+		"keep_line_breaks":      o.KeepLineBreaks,
+		"use_struct_tree":       o.UseStructTree,
+		"detect_strikethrough":  o.DetectStrikethrough,
 	}
 
 	return core.ProcessingOptions{

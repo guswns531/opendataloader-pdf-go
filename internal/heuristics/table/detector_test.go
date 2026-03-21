@@ -8,12 +8,12 @@ import (
 
 func TestDetectConvertsAlignedGridIntoTable(t *testing.T) {
 	input := []model.ContentElement{
-		paragraph("Intro", 20, model.NewBox(40, 744, 260, 760)),
+		paragraph("This report summarizes the sample set.", 20, model.NewBox(40, 744, 260, 760)),
 		paragraph("North", 40, model.NewBox(40, 700, 120, 716)),
 		paragraph("18", 180, model.NewBox(180, 700, 220, 716)),
 		paragraph("South", 40, model.NewBox(40, 670, 120, 686)),
 		paragraph("24", 180, model.NewBox(180, 670, 220, 686)),
-		paragraph("Outro", 20, model.NewBox(40, 620, 260, 636)),
+		paragraph("Additional notes follow below.", 20, model.NewBox(40, 620, 260, 636)),
 	}
 
 	got := Detect(input)
@@ -80,6 +80,25 @@ func TestDetectConvertsAlignedGridIntoTable(t *testing.T) {
 
 	if _, ok := got[2].(*model.Paragraph); !ok {
 		t.Fatalf("third element type = %T, want *model.Paragraph", got[2])
+	}
+}
+
+func TestDetectRejectsSentenceLikeAlignedRows(t *testing.T) {
+	input := []model.ContentElement{
+		paragraph("The system processes incoming requests.", 40, model.NewBox(40, 700, 260, 716)),
+		paragraph("It then stores the normalized output.", 180, model.NewBox(180, 700, 380, 716)),
+		paragraph("The job completes without incident.", 40, model.NewBox(40, 670, 260, 686)),
+		paragraph("It returns the final response to the caller.", 180, model.NewBox(180, 670, 380, 686)),
+	}
+
+	got := Detect(input)
+	if gotLen, want := len(got), len(input); gotLen != want {
+		t.Fatalf("Detect() len = %d, want %d", gotLen, want)
+	}
+	for i, element := range got {
+		if _, ok := element.(*model.Paragraph); !ok {
+			t.Fatalf("element %d type = %T, want *model.Paragraph", i, element)
+		}
 	}
 }
 

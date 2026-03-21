@@ -121,7 +121,6 @@ type candidate struct {
 
 type headingStyleKey struct {
 	sizeBucket float64
-	bold       bool
 }
 
 type pageStats struct {
@@ -222,6 +221,9 @@ func scoreCandidate(cand candidate, d Detector) float64 {
 	if !cand.numbered && !cand.allCaps && cand.fontSize <= 0 && !cand.bold {
 		return 0
 	}
+	if !cand.numbered && !cand.allCaps && cand.endsWithSentence && cand.wordCount > 3 {
+		return 0
+	}
 
 	score := 0.0
 
@@ -262,13 +264,13 @@ func scoreCandidate(cand candidate, d Detector) float64 {
 
 	switch {
 	case cand.wordCount <= 4:
-		score += 0.15
+		score += 0.13
 	case cand.wordCount <= 8:
-		score += 0.08
+		score += 0.07
 	case cand.wordCount <= 12:
-		score += 0.03
+		score += 0.00
 	default:
-		score -= 0.12
+		score -= 0.14
 	}
 
 	if cand.endsWithSentence {
@@ -287,7 +289,6 @@ func assignHeadingLevels(candidates []candidate, sizeBucketStep float64) {
 		}
 		key := headingStyleKey{
 			sizeBucket: bucketFontSize(cand.heading.FontSize, sizeBucketStep),
-			bold:       cand.heading.Bold,
 		}
 		if _, ok := seen[key]; ok {
 			continue
@@ -299,9 +300,6 @@ func assignHeadingLevels(candidates []candidate, sizeBucketStep float64) {
 	sort.SliceStable(keys, func(i, j int) bool {
 		if keys[i].sizeBucket != keys[j].sizeBucket {
 			return keys[i].sizeBucket > keys[j].sizeBucket
-		}
-		if keys[i].bold != keys[j].bold {
-			return keys[i].bold && !keys[j].bold
 		}
 		return false
 	})
@@ -318,7 +316,6 @@ func assignHeadingLevels(candidates []candidate, sizeBucketStep float64) {
 		}
 		key := headingStyleKey{
 			sizeBucket: bucketFontSize(candidates[i].heading.FontSize, sizeBucketStep),
-			bold:       candidates[i].heading.Bold,
 		}
 		candidates[i].heading.HeadingLevel = levels[key]
 	}
