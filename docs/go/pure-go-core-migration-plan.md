@@ -1,5 +1,8 @@
 # Pure Go Core Migration Plan
 
+Actionable phase tracking lives in `docs/go/pure-go-phase-checklist.md`.
+Compatibility freeze details live in `docs/go/pure-go-contract-matrix.md`.
+
 ## 1. Goal
 
 Replace the current Java + veraPDF local extraction core with a Pure Go implementation while preserving the public compatibility surface that matters:
