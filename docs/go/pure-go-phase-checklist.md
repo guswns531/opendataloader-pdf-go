@@ -120,3 +120,4 @@
 - [x] `phase-1: add real native pdf loader skeleton and handle shell`
 - [x] `phase-1: extend native skeleton to expose page handle shells through the ingestor path`
 - [x] `phase-1: derive initial page shells from raw pdf bytes in the skeleton loader`
+- [x] `phase-1: derive first text artifact shells from raw pdf bytes`

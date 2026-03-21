@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/guswns531/opendataloader-pdf-go/internal/model"
 )
@@ -68,20 +69,23 @@ func (l *SkeletonLoader) open(name string, data []byte) DocumentHandle {
 		}
 		pages = append(pages, page)
 	}
+	artifactsByPage := shellArtifactsFromPDF(data, pages)
 	return &skeletonDocumentHandle{
 		metadata: model.DocumentMetadata{
 			FileName:  name,
 			PageCount: len(pages),
 		},
-		raw:   append([]byte(nil), data...),
-		pages: pages,
+		raw:             append([]byte(nil), data...),
+		pages:           pages,
+		artifactsByPage: artifactsByPage,
 	}
 }
 
 type skeletonDocumentHandle struct {
-	metadata model.DocumentMetadata
-	raw      []byte
-	pages    []model.PageMetadata
+	metadata        model.DocumentMetadata
+	raw             []byte
+	pages           []model.PageMetadata
+	artifactsByPage [][]*model.RawArtifact
 }
 
 func (h *skeletonDocumentHandle) Metadata() model.DocumentMetadata {
@@ -96,7 +100,14 @@ func (h *skeletonDocumentHandle) Page(pageIndex int) (PageHandle, error) {
 	if pageIndex < 0 || pageIndex >= len(h.pages) {
 		return nil, fmt.Errorf("native skeleton page %d is not implemented", pageIndex)
 	}
-	return &skeletonPageHandle{metadata: h.pages[pageIndex]}, nil
+	var artifacts []*model.RawArtifact
+	if pageIndex < len(h.artifactsByPage) {
+		artifacts = cloneArtifacts(h.artifactsByPage[pageIndex])
+	}
+	return &skeletonPageHandle{
+		metadata:  h.pages[pageIndex],
+		artifacts: artifacts,
+	}, nil
 }
 
 func (h *skeletonDocumentHandle) Close() error {
@@ -105,7 +116,8 @@ func (h *skeletonDocumentHandle) Close() error {
 }
 
 type skeletonPageHandle struct {
-	metadata model.PageMetadata
+	metadata  model.PageMetadata
+	artifacts []*model.RawArtifact
 }
 
 func (h *skeletonPageHandle) Metadata() model.PageMetadata {
@@ -113,7 +125,7 @@ func (h *skeletonPageHandle) Metadata() model.PageMetadata {
 }
 
 func (h *skeletonPageHandle) Artifacts(_ context.Context, _ ArtifactOptions) ([]*model.RawArtifact, error) {
-	return nil, nil
+	return cloneArtifacts(h.artifacts), nil
 }
 
 func (h *skeletonPageHandle) TableCandidates(_ context.Context) (*TableCandidateSet, error) {
@@ -207,4 +219,105 @@ func parseFloat(raw []byte) (float64, bool) {
 		return 0, false
 	}
 	return value, true
+}
+
+func shellArtifactsFromPDF(data []byte, pages []model.PageMetadata) [][]*model.RawArtifact {
+	if len(pages) == 0 {
+		return nil
+	}
+	texts := extractLiteralStrings(data)
+	artifactsByPage := make([][]*model.RawArtifact, len(pages))
+	if len(texts) == 0 {
+		return artifactsByPage
+	}
+
+	chunks := distributeTextAcrossPages(texts, len(pages))
+	for pageIndex, pageTexts := range chunks {
+		pageMeta := pages[pageIndex]
+		artifacts := make([]*model.RawArtifact, 0, len(pageTexts))
+		for i, text := range pageTexts {
+			if strings.TrimSpace(text) == "" {
+				continue
+			}
+			artifacts = append(artifacts, &model.RawArtifact{
+				ID:         model.ArtifactID(i + 1),
+				Kind:       model.ArtifactKindText,
+				PageIndex:  pageMeta.Index,
+				PageNumber: pageMeta.Number,
+				Sequence:   i,
+				Bounds:     shellBoundsForText(pageMeta, i, text),
+				Text:       text,
+				Style: model.TextProperties{
+					Font:     "skeleton",
+					FontSize: 12,
+					Content:  text,
+				},
+			})
+		}
+		artifactsByPage[pageIndex] = artifacts
+	}
+	return artifactsByPage
+}
+
+var literalStringPattern = regexp.MustCompile(`\((?:\\.|[^\\()])*\)`)
+
+func extractLiteralStrings(data []byte) []string {
+	matches := literalStringPattern.FindAll(data, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+		text := string(match[1 : len(match)-1])
+		text = strings.ReplaceAll(text, `\(`, `(`)
+		text = strings.ReplaceAll(text, `\)`, `)`)
+		text = strings.ReplaceAll(text, `\\`, `\`)
+		text = strings.TrimSpace(text)
+		if text == "" {
+			continue
+		}
+		out = append(out, text)
+	}
+	return out
+}
+
+func distributeTextAcrossPages(texts []string, pageCount int) [][]string {
+	out := make([][]string, pageCount)
+	if pageCount == 0 || len(texts) == 0 {
+		return out
+	}
+
+	for i, text := range texts {
+		pageIndex := i * pageCount / len(texts)
+		if pageIndex >= pageCount {
+			pageIndex = pageCount - 1
+		}
+		out[pageIndex] = append(out[pageIndex], text)
+	}
+	return out
+}
+
+func shellBoundsForText(page model.PageMetadata, index int, text string) model.Box {
+	height := 12.0
+	lineGap := 18.0
+	left := 48.0
+	top := page.Size.Height - 48 - float64(index)*lineGap
+	if top <= 0 {
+		top = page.Bounds.Top - 48 - float64(index)*lineGap
+	}
+	if top <= 0 {
+		top = 800 - 48 - float64(index)*lineGap
+	}
+	bottom := top - height
+	width := math.Max(48, float64(6*len([]rune(text))))
+	return model.Box{
+		Left:   left,
+		Bottom: bottom,
+		Right:  left + width,
+		Top:    top,
+	}
 }
