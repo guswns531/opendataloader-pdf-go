@@ -6,7 +6,8 @@ This document freezes the compatibility surface for the Pure Go local-core migra
 ## Phase Status
 
 - Phase 1 foundation: complete
-- Current active focus: Phase 2 CLI/emitter parity on fixtures
+- Phase 2 CLI/emitter parity on fixtures: complete
+- Current active focus: Phase 3 deterministic heuristics
 
 ## MVP Contract Sources
 
@@ -42,7 +43,7 @@ This document freezes the compatibility surface for the Pure Go local-core migra
 | Option / behavior | Status | Notes |
 | --- | --- | --- |
 | `--output-dir`, `-o` | Implemented | Output path is honored |
-| `--format`, `-f` for `json`, `markdown`, `html`, `text` | Implemented | Unsupported formats are silently dropped today |
+| `--format`, `-f` for `json`, `markdown`, `html`, `text` | Implemented | Unsupported but contract-valid formats now fail explicitly in the Go CLI |
 | `--quiet`, `-q` | Implemented | Console logging suppression works |
 | `--export-options` | Implemented | Exports the checked-in options contract JSON |
 | `--pages` | Implemented | Parsed and applied after pipeline run |
