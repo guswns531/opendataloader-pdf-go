@@ -39,23 +39,7 @@ func TestResolveUsesSemanticFixturesForJSON(t *testing.T) {
 	}
 }
 
-func TestResolveUsesTemporaryPDFBridgeForPDF(t *testing.T) {
-	selector := Selector{
-		SemanticFixture: stubIngestor{name: "semantic"},
-		NativeFixture:   stubIngestor{name: "native"},
-		PDFBridge:       stubIngestor{name: "pdf-bridge"},
-	}
-
-	got, err := selector.Resolve("sample.pdf", false)
-	if err != nil {
-		t.Fatalf("Resolve() error = %v", err)
-	}
-	if got.Name() != "pdf-bridge" {
-		t.Fatalf("Resolve() selected %q, want pdf-bridge", got.Name())
-	}
-}
-
-func TestResolvePrefersNativePDFWhenConfigured(t *testing.T) {
+func TestResolveUsesPDFRuntimeForPDF(t *testing.T) {
 	selector := Selector{
 		SemanticFixture: stubIngestor{name: "semantic"},
 		NativeFixture:   stubIngestor{name: "native"},
@@ -67,8 +51,25 @@ func TestResolvePrefersNativePDFWhenConfigured(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
-	if got.Name() != "native-pdf" {
-		t.Fatalf("Resolve() selected %q, want native-pdf", got.Name())
+	if got.Name() != "pdf-runtime" {
+		t.Fatalf("Resolve() selected %q, want pdf-runtime", got.Name())
+	}
+}
+
+func TestResolveWrapsNativePDFAndBridgeInRuntime(t *testing.T) {
+	selector := Selector{
+		SemanticFixture: stubIngestor{name: "semantic"},
+		NativeFixture:   stubIngestor{name: "native"},
+		NativePDF:       stubIngestor{name: "native-pdf"},
+		PDFBridge:       stubIngestor{name: "pdf-bridge"},
+	}
+
+	got, err := selector.Resolve("sample.pdf", false)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if got.Name() != "pdf-runtime" {
+		t.Fatalf("Resolve() selected %q, want pdf-runtime", got.Name())
 	}
 }
 
