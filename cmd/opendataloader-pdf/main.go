@@ -10,12 +10,15 @@ import (
 	clioptions "github.com/guswns531/opendataloader-pdf-go/internal/cli/options"
 	"github.com/guswns531/opendataloader-pdf-go/internal/cli/pagerange"
 	"github.com/guswns531/opendataloader-pdf-go/internal/core"
+	"github.com/guswns531/opendataloader-pdf-go/internal/emit/htmlout"
 	"github.com/guswns531/opendataloader-pdf-go/internal/emit/schemajson"
 	"github.com/guswns531/opendataloader-pdf-go/internal/emit/semanticmd"
+	"github.com/guswns531/opendataloader-pdf-go/internal/emit/textout"
 	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/fixture"
 	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/pdftext"
 	"github.com/guswns531/opendataloader-pdf-go/internal/model"
 	"github.com/guswns531/opendataloader-pdf-go/internal/pipeline/local"
+	"github.com/guswns531/opendataloader-pdf-go/internal/pipeline/pagefilter"
 )
 
 const version = "0.0.0-dev"
@@ -103,6 +106,11 @@ func processInput(input string, opts clioptions.Options, pages []int) error {
 	if err != nil {
 		return fmt.Errorf("pipeline failed: %w", err)
 	}
+	if len(pages) > 0 {
+		if err := pagefilter.Apply(document, toPageNumbers(pages)); err != nil {
+			return fmt.Errorf("page filtering failed: %w", err)
+		}
+	}
 	outputPaths, err := writeOutputs(document, ctx, options)
 	if err != nil {
 		return fmt.Errorf("writing outputs failed: %w", err)
@@ -185,8 +193,10 @@ func emittersForFormats(formats []core.OutputFormat) ([]core.Emitter, error) {
 			emitters = append(emitters, schemajson.New())
 		case core.OutputFormatMarkdown:
 			emitters = append(emitters, semanticmd.New())
-		case core.OutputFormatHTML, core.OutputFormatText:
-			return nil, fmt.Errorf("format %q is not implemented in the pure go skeleton", format)
+		case core.OutputFormatHTML:
+			emitters = append(emitters, htmlout.New())
+		case core.OutputFormatText:
+			emitters = append(emitters, textout.New())
 		default:
 			return nil, fmt.Errorf("unsupported format %q", format)
 		}
@@ -208,4 +218,12 @@ func extensionForFormat(format core.OutputFormat) string {
 	default:
 		return ".json"
 	}
+}
+
+func toPageNumbers(pages []int) []model.PageNumber {
+	out := make([]model.PageNumber, 0, len(pages))
+	for _, page := range pages {
+		out = append(out, model.PageNumber(page))
+	}
+	return out
 }

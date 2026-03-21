@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -142,5 +143,79 @@ func TestRunDirectoryDiscoversSupportedInputs(t *testing.T) {
 	outputPath := filepath.Join(outputDir, "dir_fixture.json")
 	if _, err := os.Stat(outputPath); err != nil {
 		t.Fatalf("expected discovered output file %s: %v", outputPath, err)
+	}
+}
+
+func TestRunAppliesPagesFilterAndWritesTextAndHTML(t *testing.T) {
+	dir := t.TempDir()
+	fixturePath := filepath.Join(dir, "paged_fixture.json")
+	outputDir := filepath.Join(dir, "out")
+	const fixtureJSON = `{
+	  "metadata": {"file_name": "paged_fixture.json", "page_count": 2},
+	  "pages": [
+	    {
+	      "metadata": {"number": 1, "index": 0},
+	      "artifacts": [
+	        {
+	          "kind": "text",
+	          "page_index": 0,
+	          "page_number": 1,
+	          "sequence": 0,
+	          "bounds": {"left": 0, "bottom": 90, "right": 40, "top": 100},
+	          "text": "Page One"
+	        }
+	      ]
+	    },
+	    {
+	      "metadata": {"number": 2, "index": 1},
+	      "artifacts": [
+	        {
+	          "kind": "text",
+	          "page_index": 1,
+	          "page_number": 2,
+	          "sequence": 0,
+	          "bounds": {"left": 0, "bottom": 90, "right": 40, "top": 100},
+	          "text": "Page Two"
+	        }
+	      ]
+	    }
+	  ]
+	}`
+	if err := os.WriteFile(fixturePath, []byte(fixtureJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if got := run([]string{
+		"--quiet",
+		"--output-dir", outputDir,
+		"--format", "text,html",
+		"--pages", "2",
+		fixturePath,
+	}); got != 0 {
+		t.Fatalf("run() = %d, want 0", got)
+	}
+
+	textPath := filepath.Join(outputDir, "paged_fixture.txt")
+	htmlPath := filepath.Join(outputDir, "paged_fixture.html")
+	textContent, err := os.ReadFile(textPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", textPath, err)
+	}
+	htmlContent, err := os.ReadFile(htmlPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", htmlPath, err)
+	}
+
+	if strings.Contains(string(textContent), "Page One") {
+		t.Fatalf("text output should not contain filtered page content: %s", textContent)
+	}
+	if !strings.Contains(string(textContent), "Page Two") {
+		t.Fatalf("text output should contain selected page content: %s", textContent)
+	}
+	if strings.Contains(string(htmlContent), "Page One") {
+		t.Fatalf("html output should not contain filtered page content: %s", htmlContent)
+	}
+	if !strings.Contains(string(htmlContent), "Page Two") {
+		t.Fatalf("html output should contain selected page content: %s", htmlContent)
 	}
 }
