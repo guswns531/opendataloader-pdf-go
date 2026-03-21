@@ -118,3 +118,4 @@
 - [x] `phase-1: prefer native backend and keep pdftext as fallback bridge`
 - [x] `phase-1: native pdf path now flows through a loader placeholder via nativepdf.NewIngestor(loader)`
 - [x] `phase-1: add real native pdf loader skeleton and handle shell`
+- [x] `phase-1: extend native skeleton to expose page handle shells through the ingestor path`

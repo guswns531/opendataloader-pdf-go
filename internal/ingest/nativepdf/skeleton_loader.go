@@ -11,13 +11,22 @@ import (
 )
 
 // SkeletonLoader is the first real native PDF loader shape. It accepts `.pdf`
-// sources and produces a real DocumentHandle, but page extraction is not
-// implemented yet.
-type SkeletonLoader struct{}
+// sources and produces a real DocumentHandle shell. Page extraction is still
+// skeletal, but page metadata shells can already be injected for tests and
+// future backend bring-up work.
+type SkeletonLoader struct {
+	pageMetadata []model.PageMetadata
+}
 
 // NewSkeletonLoader returns the current native PDF loader skeleton.
-func NewSkeletonLoader() *SkeletonLoader {
-	return &SkeletonLoader{}
+func NewSkeletonLoader() *SkeletonLoader { return &SkeletonLoader{} }
+
+// NewSkeletonLoaderWithPages returns a skeleton loader preloaded with page
+// metadata shells for tests and future parser bring-up work.
+func NewSkeletonLoaderWithPages(pages []model.PageMetadata) *SkeletonLoader {
+	return &SkeletonLoader{
+		pageMetadata: append([]model.PageMetadata(nil), pages...),
+	}
 }
 
 // OpenPath reads the PDF bytes from disk and returns a document handle shell.
@@ -42,18 +51,30 @@ func (l *SkeletonLoader) OpenReader(_ context.Context, name string, r io.Reader,
 }
 
 func (l *SkeletonLoader) open(name string, data []byte) DocumentHandle {
+	pages := make([]model.PageMetadata, 0, len(l.pageMetadata))
+	for i, page := range l.pageMetadata {
+		if page.Index == 0 && i > 0 {
+			page.Index = model.PageIndex(i)
+		}
+		if page.Number <= 0 {
+			page.Number = model.PageNumber(i + 1)
+		}
+		pages = append(pages, page)
+	}
 	return &skeletonDocumentHandle{
 		metadata: model.DocumentMetadata{
 			FileName:  name,
-			PageCount: 0,
+			PageCount: len(pages),
 		},
-		raw: append([]byte(nil), data...),
+		raw:   append([]byte(nil), data...),
+		pages: pages,
 	}
 }
 
 type skeletonDocumentHandle struct {
 	metadata model.DocumentMetadata
 	raw      []byte
+	pages    []model.PageMetadata
 }
 
 func (h *skeletonDocumentHandle) Metadata() model.DocumentMetadata {
@@ -61,14 +82,37 @@ func (h *skeletonDocumentHandle) Metadata() model.DocumentMetadata {
 }
 
 func (h *skeletonDocumentHandle) PageCount() int {
-	return 0
+	return len(h.pages)
 }
 
 func (h *skeletonDocumentHandle) Page(pageIndex int) (PageHandle, error) {
-	return nil, fmt.Errorf("native skeleton page %d is not implemented", pageIndex)
+	if pageIndex < 0 || pageIndex >= len(h.pages) {
+		return nil, fmt.Errorf("native skeleton page %d is not implemented", pageIndex)
+	}
+	return &skeletonPageHandle{metadata: h.pages[pageIndex]}, nil
 }
 
 func (h *skeletonDocumentHandle) Close() error {
 	h.raw = nil
 	return nil
+}
+
+type skeletonPageHandle struct {
+	metadata model.PageMetadata
+}
+
+func (h *skeletonPageHandle) Metadata() model.PageMetadata {
+	return h.metadata
+}
+
+func (h *skeletonPageHandle) Artifacts(_ context.Context, _ ArtifactOptions) ([]*model.RawArtifact, error) {
+	return nil, nil
+}
+
+func (h *skeletonPageHandle) TableCandidates(_ context.Context) (*TableCandidateSet, error) {
+	return nil, nil
+}
+
+func (h *skeletonPageHandle) StructTree(_ context.Context) (*StructNode, error) {
+	return nil, nil
 }
