@@ -3,8 +3,12 @@ package local
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/guswns531/opendataloader-pdf-go/internal/core"
+	"github.com/guswns531/opendataloader-pdf-go/internal/filter/layout"
+	"github.com/guswns531/opendataloader-pdf-go/internal/filter/sanitize"
+	"github.com/guswns531/opendataloader-pdf-go/internal/filter/textclean"
 	"github.com/guswns531/opendataloader-pdf-go/internal/heuristics/headerfooter"
 	"github.com/guswns531/opendataloader-pdf-go/internal/heuristics/heading"
 	"github.com/guswns531/opendataloader-pdf-go/internal/heuristics/lists"
@@ -43,6 +47,7 @@ func (p *Pipeline) Run(ctx *core.ProcessingContext, source core.Source, emitter 
 	ctx.SetDocument(document)
 
 	ctx.SetStage(core.StageHeuristics)
+	applyPreFilters(document, ctx.Options)
 	applyParagraphAssembly(document)
 	applyHeaderFooterFiltering(document)
 	applyHeadingDetection(document)
@@ -50,6 +55,7 @@ func (p *Pipeline) Run(ctx *core.ProcessingContext, source core.Source, emitter 
 	applyListDetection(document)
 	applyReadingOrder(document)
 	rebuildDocumentKids(document)
+	applyPostFilters(document, ctx.Options)
 
 	if emitter != nil {
 		ctx.SetStage(core.StageEmission)
@@ -59,6 +65,28 @@ func (p *Pipeline) Run(ctx *core.ProcessingContext, source core.Source, emitter 
 	}
 
 	return document, nil
+}
+
+func applyPreFilters(document *model.Document, options core.ProcessingOptions) {
+	if document == nil {
+		return
+	}
+
+	replacement := extrasString(options.Extras, "replace_invalid", " ")
+	textclean.New(replacement).Document(document)
+
+	if layoutFilteringEnabled(extrasString(options.Extras, "content_safety_off", "")) {
+		_ = layout.Apply(document)
+	}
+}
+
+func applyPostFilters(document *model.Document, options core.ProcessingOptions) {
+	if document == nil {
+		return
+	}
+	if extrasBool(options.Extras, "sanitize") {
+		_ = sanitize.Apply(document)
+	}
 }
 
 func applyParagraphAssembly(document *model.Document) {
@@ -168,4 +196,47 @@ func rebuildDocumentKids(document *model.Document) {
 		}
 		document.Kids = append(document.Kids, page.Kids...)
 	}
+}
+
+func extrasBool(extras map[string]any, key string) bool {
+	if extras == nil {
+		return false
+	}
+	value, ok := extras[key]
+	if !ok {
+		return false
+	}
+	boolean, ok := value.(bool)
+	return ok && boolean
+}
+
+func extrasString(extras map[string]any, key, fallback string) string {
+	if extras == nil {
+		return fallback
+	}
+	value, ok := extras[key]
+	if !ok {
+		return fallback
+	}
+	text, ok := value.(string)
+	if !ok {
+		return fallback
+	}
+	if text == "" {
+		return fallback
+	}
+	return text
+}
+
+func layoutFilteringEnabled(spec string) bool {
+	if strings.TrimSpace(spec) == "" {
+		return true
+	}
+	for _, token := range strings.Split(spec, ",") {
+		switch strings.TrimSpace(strings.ToLower(token)) {
+		case "all", "off-page", "tiny":
+			return false
+		}
+	}
+	return true
 }

@@ -144,11 +144,19 @@ func (o Options) ProcessingOptions(inputPath string) core.ProcessingOptions {
 		documentName = filepath.Base(inputPath)
 	}
 
+	extras := map[string]any{
+		"sanitize":              o.Sanitize,
+		"replace_invalid":       o.ReplaceInvalidChars,
+		"content_safety_off":    o.ContentSafetyOff,
+		"include_header_footer": o.IncludeHeaderFooter,
+	}
+
 	return core.ProcessingOptions{
 		InputPath:        inputPath,
 		OutputPath:       o.OutputDir,
 		DocumentName:     documentName,
 		RequestedFormats: ParseFormats(o.Format),
+		Extras:           extras,
 	}
 }
 

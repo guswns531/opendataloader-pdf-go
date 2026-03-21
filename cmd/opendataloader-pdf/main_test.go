@@ -219,3 +219,51 @@ func TestRunAppliesPagesFilterAndWritesTextAndHTML(t *testing.T) {
 		t.Fatalf("html output should contain selected page content: %s", htmlContent)
 	}
 }
+
+func TestRunAppliesSanitizeAndTextCleanup(t *testing.T) {
+	dir := t.TempDir()
+	fixturePath := filepath.Join(dir, "sanitize_fixture.json")
+	outputDir := filepath.Join(dir, "out")
+	const fixtureJSON = `{
+	  "metadata": {"file_name": "sanitize_fixture.json", "page_count": 1},
+	  "pages": [
+	    {
+	      "metadata": {"number": 1, "index": 0},
+	      "artifacts": [
+	        {
+	          "kind": "text",
+	          "page_index": 0,
+	          "page_number": 1,
+	          "sequence": 0,
+	          "bounds": {"left": 0, "bottom": 90, "right": 80, "top": 100},
+	          "text": "reach me at user@example.com\u0000"
+	        }
+	      ]
+	    }
+	  ]
+	}`
+	if err := os.WriteFile(fixturePath, []byte(fixtureJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if got := run([]string{
+		"--quiet",
+		"--output-dir", outputDir,
+		"--format", "text",
+		"--replace-invalid-chars", "_",
+		"--sanitize",
+		fixturePath,
+	}); got != 0 {
+		t.Fatalf("run() = %d, want 0", got)
+	}
+
+	outputPath := filepath.Join(outputDir, "sanitize_fixture.txt")
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", outputPath, err)
+	}
+	text := string(content)
+	if !strings.Contains(text, "[EMAIL]_") {
+		t.Fatalf("expected sanitized and cleaned content, got %q", text)
+	}
+}
