@@ -290,8 +290,13 @@ func sameParagraph(prev, curr lineItem) bool {
 		return false
 	}
 	verticalGap := boxVerticalGap(prev.bounds, curr.bounds)
-	return verticalGap <= paragraphGapTolerance(prev, curr)
+	if verticalGap > paragraphGapTolerance(prev, curr) {
+		return false
+	}
+	return horizontalOverlapRatio(prev.bounds, curr.bounds) >= paragraphOverlapTolerance
 }
+
+const paragraphOverlapTolerance = 0.25
 
 func lineGapTolerance(a, b artifactItem) float64 {
 	tolerance := 1.5
@@ -342,6 +347,23 @@ func boxHorizontalGap(a, b model.Box) float64 {
 		return a.Left - b.Right
 	}
 	return 0
+}
+
+func horizontalOverlapRatio(a, b model.Box) float64 {
+	a = a.Normalize()
+	b = b.Normalize()
+	left := math.Max(a.Left, b.Left)
+	right := math.Min(a.Right, b.Right)
+	overlap := right - left
+	if overlap <= 0 {
+		return 0
+	}
+
+	width := math.Min(nonZero(a.Width()), nonZero(b.Width()))
+	if width <= 0 {
+		return 0
+	}
+	return overlap / width
 }
 
 func joinText(parts ...string) string {

@@ -116,3 +116,27 @@ func TestGroupLinesToParagraphsRespectsBlankSeparators(t *testing.T) {
 		t.Fatalf("paragraphs = %d, want %d", got, want)
 	}
 }
+
+func TestGroupLinesToParagraphsDoesNotMergeAcrossColumns(t *testing.T) {
+	lines := []Line{
+		{
+			Artifacts:  []*model.RawArtifact{{ID: 1, Kind: model.ArtifactKindText}},
+			Text:       "Right column",
+			Bounds:     model.NewBox(320, 740, 520, 756),
+			PageIndex:  0,
+			PageNumber: 1,
+		},
+		{
+			Artifacts:  []*model.RawArtifact{{ID: 2, Kind: model.ArtifactKindText}},
+			Text:       "Left column",
+			Bounds:     model.NewBox(40, 730, 240, 746),
+			PageIndex:  0,
+			PageNumber: 1,
+		},
+	}
+
+	paragraphs := GroupLinesToParagraphs(lines)
+	if got, want := len(paragraphs), 2; got != want {
+		t.Fatalf("paragraphs = %d, want %d", got, want)
+	}
+}

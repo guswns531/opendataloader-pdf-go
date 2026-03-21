@@ -1,0 +1,98 @@
+{
+  "metadata": {
+    "file_name": "two_column_reading_order.raw.json",
+    "title": "Two Column Reading Order Fixture",
+    "page_count": 1
+  },
+  "pages": [
+    {
+      "metadata": {
+        "index": 0,
+        "number": 1,
+        "label": "1",
+        "width": 612,
+        "height": 792,
+        "bounds": {
+          "left": 0,
+          "bottom": 0,
+          "right": 612,
+          "top": 792
+        }
+      },
+      "artifacts": [
+        {
+          "kind": "text",
+          "page_index": 0,
+          "page_number": 1,
+          "sequence": 0,
+          "bounds": {
+            "left": 336,
+            "bottom": 744,
+            "right": 550,
+            "top": 760
+          },
+          "text": "Right column first line.",
+          "style": {
+            "font": "Times-Roman",
+            "font_size": 11,
+            "content": "Right column first line."
+          }
+        },
+        {
+          "kind": "text",
+          "page_index": 0,
+          "page_number": 1,
+          "sequence": 1,
+          "bounds": {
+            "left": 48,
+            "bottom": 704,
+            "right": 250,
+            "top": 720
+          },
+          "text": "Left column first line.",
+          "style": {
+            "font": "Times-Roman",
+            "font_size": 11,
+            "content": "Left column first line."
+          }
+        },
+        {
+          "kind": "text",
+          "page_index": 0,
+          "page_number": 1,
+          "sequence": 2,
+          "bounds": {
+            "left": 336,
+            "bottom": 584,
+            "right": 556,
+            "top": 600
+          },
+          "text": "Right column second line.",
+          "style": {
+            "font": "Times-Roman",
+            "font_size": 11,
+            "content": "Right column second line."
+          }
+        },
+        {
+          "kind": "text",
+          "page_index": 0,
+          "page_number": 1,
+          "sequence": 3,
+          "bounds": {
+            "left": 48,
+            "bottom": 544,
+            "right": 258,
+            "top": 560
+          },
+          "text": "Left column second line.",
+          "style": {
+            "font": "Times-Roman",
+            "font_size": 11,
+            "content": "Left column second line."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "metadata": {
+    "file_name": "basic.raw.json",
+    "title": "Basic Native Raw Fixture",
+    "page_count": 1
+  },
+  "pages": [
+    {
+      "metadata": {
+        "index": 0,
+        "number": 1,
+        "label": "1",
+        "width": 595,
+        "height": 842,
+        "bounds": {
+          "left": 0,
+          "bottom": 0,
+          "right": 595,
+          "top": 842
+        }
+      },
+      "artifacts": [
+        {
+          "kind": "text",
+          "page_index": 0,
+          "page_number": 1,
+          "sequence": 0,
+          "bounds": {
+            "left": 48,
+            "bottom": 706,
+            "right": 240,
+            "top": 722
+          },
+          "text": "Pure Go native fixture paragraph one.",
+          "style": {
+            "font": "Times-Roman",
+            "font_size": 12,
+            "content": "Pure Go native fixture paragraph one."
+          }
+        },
+        {
+          "kind": "text",
+          "page_index": 0,
+          "page_number": 1,
+          "sequence": 1,
+          "bounds": {
+            "left": 48,
+            "bottom": 628,
+            "right": 282,
+            "top": 644
+          },
+          "text": "Second paragraph placed lower on the page.",
+          "style": {
+            "font": "Times-Roman",
+            "font_size": 12,
+            "content": "Second paragraph placed lower on the page."
+          }
+        }
+      ]
+    }
+  ]
+}

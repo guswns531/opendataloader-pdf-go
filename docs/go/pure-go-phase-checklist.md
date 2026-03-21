@@ -113,3 +113,4 @@
 - [x] `phase-1: add native handle adapter and raw fixture schema`
 - [x] `phase-1: add fixture-backed native loader`
 - [x] `phase-1: route .raw.json through nativepdf and mark pdftext temporary`
+- [x] `phase-1: add native raw goldens and stop cross-column paragraph collapse`
