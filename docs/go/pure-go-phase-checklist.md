@@ -116,3 +116,4 @@
 - [x] `phase-1: add native raw goldens and stop cross-column paragraph collapse`
 - [x] `phase-1: split runtime selection out of cmd and isolate pdftext as a bridge`
 - [x] `phase-1: prefer native backend and keep pdftext as fallback bridge`
+- [x] `phase-1: native pdf path now flows through a loader placeholder via nativepdf.NewIngestor(loader)`

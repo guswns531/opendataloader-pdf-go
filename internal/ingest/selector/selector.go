@@ -26,7 +26,7 @@ func New() Selector {
 	return Selector{
 		SemanticFixture: fixture.New(),
 		NativeFixture:   nativepdf.NewIngestor(nativepdf.NewFixtureLoader()),
-		NativePDF:       nativepdf.NewUnavailableIngestor(),
+		NativePDF:       nativepdf.NewIngestor(nativepdf.NewUnavailableLoader()),
 		PDFBridge:       TemporaryPDFBridge(),
 	}
 }
