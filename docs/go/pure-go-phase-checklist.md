@@ -110,3 +110,4 @@
 - [x] `phase-1: draft native ingestion api`
 - [x] `phase-1: add native ingestion interface scaffold`
 - [x] `phase-1: add native handle adapter and raw fixture schema`
+- [x] `phase-1: add fixture-backed native loader`

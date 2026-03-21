@@ -86,6 +86,7 @@ These areas are already worth keeping:
 - processing context and option resolution
 - CLI discovery and page-range parsing
 - fixture ingestion path for downstream algorithm tests
+- fixture-backed native loader for raw-artifact goldens
 - JSON / Markdown / HTML / text emitters as scaffolding
 - heuristic packages as temporary or starter implementations
 
