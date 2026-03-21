@@ -14,9 +14,7 @@ import (
 	"github.com/guswns531/opendataloader-pdf-go/internal/emit/schemajson"
 	"github.com/guswns531/opendataloader-pdf-go/internal/emit/semanticmd"
 	"github.com/guswns531/opendataloader-pdf-go/internal/emit/textout"
-	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/fixture"
-	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/nativepdf"
-	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/pdftext"
+	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/selector"
 	"github.com/guswns531/opendataloader-pdf-go/internal/model"
 	"github.com/guswns531/opendataloader-pdf-go/internal/pipeline/local"
 	"github.com/guswns531/opendataloader-pdf-go/internal/pipeline/pagefilter"
@@ -72,21 +70,11 @@ func run(args []string) int {
 }
 
 func pipelineForInput(path string, useFixture bool) (*local.Pipeline, error) {
-	switch {
-	case strings.HasSuffix(strings.ToLower(path), ".raw.json"):
-		return local.New(nativepdf.NewIngestor(nativepdf.NewFixtureLoader())), nil
-	case useFixture, strings.EqualFold(filepath.Ext(path), ".json"):
-		return local.New(fixture.New()), nil
-	case strings.EqualFold(filepath.Ext(path), ".pdf"):
-		return local.New(defaultPDFIngestor()), nil
-	default:
-		return nil, fmt.Errorf("unsupported input type for %q", path)
+	ingestor, err := selector.New().Resolve(path, useFixture)
+	if err != nil {
+		return nil, err
 	}
-}
-
-func defaultPDFIngestor() core.Ingestor {
-	// Temporary bridge until the nativepdf package grows a real parser backend.
-	return pdftext.New()
+	return local.New(ingestor), nil
 }
 
 func processInput(input string, opts clioptions.Options, pages []int) error {

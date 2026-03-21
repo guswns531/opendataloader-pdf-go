@@ -85,7 +85,7 @@ These areas are already worth keeping:
 - Go-native document graph and IDs
 - processing context and option resolution
 - CLI discovery and page-range parsing
-- runtime selection: `.raw.json` -> nativepdf fixture loader, `.json` -> semantic fixture loader, `.pdf` -> temporary pdftext path
+- runtime selection lives outside `cmd`; `.raw.json` -> nativepdf fixture loader, `.json` -> semantic fixture loader, `.pdf` -> temporary pdftext bridge
 - fixture ingestion path for downstream algorithm tests
 - fixture-backed native loader for raw-artifact goldens
 - JSON / Markdown / HTML / text emitters as scaffolding

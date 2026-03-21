@@ -6,7 +6,7 @@
 - [ ] Do not use `github.com/ledongthuc/pdf` or another high-level shortcut as the final ingestion core.
 - [ ] Preserve `options.json` CLI semantics, `schema.json` JSON shape, and Node/Python wrapper behavior.
 - [ ] Treat fixture ingestion as a test harness only, not the final runtime backend.
-- [ ] Runtime selection today is `.raw.json` -> nativepdf fixture loader, `.json` -> semantic fixture loader, `.pdf` -> temporary pdftext path.
+- [ ] Runtime selection is now split out of `cmd`; `.raw.json` -> nativepdf fixture loader, `.json` -> semantic fixture loader, `.pdf` -> temporary pdftext bridge.
 - [ ] Keep hybrid, enrichments, annotated PDF, and tagged-PDF parity out of MVP unless a phase explicitly pulls them in.
 
 ## Area Classification
@@ -114,3 +114,4 @@
 - [x] `phase-1: add fixture-backed native loader`
 - [x] `phase-1: route .raw.json through nativepdf and mark pdftext temporary`
 - [x] `phase-1: add native raw goldens and stop cross-column paragraph collapse`
+- [x] `phase-1: split runtime selection out of cmd and isolate pdftext as a bridge`
