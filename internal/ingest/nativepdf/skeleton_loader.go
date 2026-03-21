@@ -1,6 +1,8 @@
 package nativepdf
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
 	"fmt"
 	"io"
@@ -225,7 +227,7 @@ func shellArtifactsFromPDF(data []byte, pages []model.PageMetadata) [][]*model.R
 	if len(pages) == 0 {
 		return nil
 	}
-	texts := extractLiteralStrings(data)
+	texts := extractTextShellStrings(data)
 	artifactsByPage := make([][]*model.RawArtifact, len(pages))
 	if len(texts) == 0 {
 		return artifactsByPage
@@ -260,6 +262,20 @@ func shellArtifactsFromPDF(data []byte, pages []model.PageMetadata) [][]*model.R
 }
 
 var literalStringPattern = regexp.MustCompile(`\((?:\\.|[^\\()])*\)`)
+var tjPattern = regexp.MustCompile(`\((?:\\.|[^\\()])*\)\s*Tj`)
+var tjArrayPattern = regexp.MustCompile(`\[(?s:.*?)\]\s*TJ`)
+
+func extractTextShellStrings(data []byte) []string {
+	texts := extractContentStreamStrings(data)
+	if len(texts) == 0 {
+		texts = append(texts, extractLiteralStrings(data)...)
+	}
+	streamTexts := extractStringsFromStreams(data)
+	if len(streamTexts) > 0 {
+		texts = append(texts, streamTexts...)
+	}
+	return dedupeStrings(texts)
+}
 
 func extractLiteralStrings(data []byte) []string {
 	matches := literalStringPattern.FindAll(data, -1)
@@ -281,6 +297,133 @@ func extractLiteralStrings(data []byte) []string {
 			continue
 		}
 		out = append(out, text)
+	}
+	return out
+}
+
+func extractContentStreamStrings(data []byte) []string {
+	if len(data) == 0 {
+		return nil
+	}
+	out := make([]string, 0)
+
+	for _, match := range tjPattern.FindAll(data, -1) {
+		for _, text := range extractLiteralStrings(match) {
+			out = append(out, text)
+		}
+	}
+	for _, match := range tjArrayPattern.FindAll(data, -1) {
+		for _, text := range extractLiteralStrings(match) {
+			out = append(out, text)
+		}
+	}
+	return out
+}
+
+func extractStringsFromStreams(data []byte) []string {
+	if len(data) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0)
+	search := data
+	offset := 0
+	for {
+		streamIndex := bytes.Index(search, []byte("stream"))
+		if streamIndex < 0 {
+			break
+		}
+		streamIndex += offset
+		streamStart := streamIndex + len("stream")
+		streamStart = skipStreamNewline(data, streamStart)
+		endRel := bytes.Index(data[streamStart:], []byte("endstream"))
+		if endRel < 0 {
+			break
+		}
+		streamEnd := streamStart + endRel
+		streamData := trimStreamData(data[streamStart:streamEnd])
+		dict := surroundingDictionary(data, streamIndex)
+
+		decoded := streamData
+		if bytes.Contains(dict, []byte("/FlateDecode")) {
+			inflated, ok := inflateStream(streamData)
+			if ok {
+				decoded = inflated
+			}
+		}
+		out = append(out, extractContentStreamStrings(decoded)...)
+
+		offset = streamEnd + len("endstream")
+		if offset >= len(data) {
+			break
+		}
+		search = data[offset:]
+	}
+	return out
+}
+
+func skipStreamNewline(data []byte, index int) int {
+	if index >= len(data) {
+		return index
+	}
+	if data[index] == '\r' {
+		index++
+	}
+	if index < len(data) && data[index] == '\n' {
+		index++
+	}
+	return index
+}
+
+func trimStreamData(data []byte) []byte {
+	data = bytes.TrimPrefix(data, []byte("\r"))
+	data = bytes.TrimPrefix(data, []byte("\n"))
+	data = bytes.TrimSuffix(data, []byte("\r"))
+	data = bytes.TrimSuffix(data, []byte("\n"))
+	return data
+}
+
+func surroundingDictionary(data []byte, streamIndex int) []byte {
+	start := streamIndex - 512
+	if start < 0 {
+		start = 0
+	}
+	window := data[start:streamIndex]
+	dictStart := bytes.LastIndex(window, []byte("<<"))
+	if dictStart < 0 {
+		return nil
+	}
+	return window[dictStart:]
+}
+
+func inflateStream(data []byte) ([]byte, bool) {
+	reader, err := zlib.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, false
+	}
+	defer reader.Close()
+	decoded, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, false
+	}
+	return decoded, true
+}
+
+func dedupeStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
 	}
 	return out
 }

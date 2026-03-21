@@ -1,6 +1,8 @@
 package nativepdf
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
 	"os"
 	"path/filepath"
@@ -157,6 +159,40 @@ func TestSkeletonLoaderDerivesTextArtifactsThroughNativeIngestor(t *testing.T) {
 	}
 	if document.Pages[0].Artifacts[0].Text != "Hello" {
 		t.Fatalf("document.Pages[0].Artifacts[0].Text = %q, want Hello", document.Pages[0].Artifacts[0].Text)
+	}
+}
+
+func TestSkeletonLoaderDerivesTextArtifactsFromFlateStream(t *testing.T) {
+	var compressed bytes.Buffer
+	writer := zlib.NewWriter(&compressed)
+	if _, err := writer.Write([]byte("BT (Compressed Hello) Tj ET")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	pdf := "%PDF-1.7\n" +
+		"1 0 obj << /Type /Page /MediaBox [0 0 612 792] >> endobj\n" +
+		"2 0 obj << /Filter /FlateDecode >>stream\n" +
+		compressed.String() + "\nendstream\n"
+
+	ingestor := NewIngestor(NewSkeletonLoader())
+	document, err := ingestor.Ingest(nil, core.Source{
+		Name:   "compressed.pdf",
+		Reader: strings.NewReader(pdf),
+	})
+	if err != nil {
+		t.Fatalf("Ingest() error = %v", err)
+	}
+	if len(document.Pages) != 1 {
+		t.Fatalf("len(document.Pages) = %d, want 1", len(document.Pages))
+	}
+	if len(document.Pages[0].Artifacts) != 1 {
+		t.Fatalf("len(document.Pages[0].Artifacts) = %d, want 1", len(document.Pages[0].Artifacts))
+	}
+	if got, want := document.Pages[0].Artifacts[0].Text, "Compressed Hello"; got != want {
+		t.Fatalf("artifact text = %q, want %q", got, want)
 	}
 }
 
