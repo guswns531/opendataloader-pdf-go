@@ -58,11 +58,11 @@
 
 ### Phase 4: Model-Coupled Semantic Processors
 
-- [ ] Port `TextLineProcessor` semantics against the Go model.
-- [ ] Port paragraph assembly and list-from-text reconstruction.
-- [ ] Port heading detection and heading-level assignment.
-- [ ] Port level metadata helpers and neighbor stitching.
-- [ ] Port special-table rewriting over precomputed table cells.
+- [x] Port `TextLineProcessor` semantics against the Go model.
+- [x] Port paragraph assembly and list-from-text reconstruction.
+- [x] Port heading detection and heading-level assignment.
+- [x] Port level metadata helpers and neighbor stitching.
+- [x] Port special-table rewriting over precomputed table cells.
 
 ### Phase 5: Native Pure-Go Ingestion
 
@@ -104,7 +104,8 @@
 - [x] Phase 1 complete
 - [x] Phase 2 complete
 - [x] Phase 3 complete
-- [ ] Phase 4 active
+- [x] Phase 4 complete
+- [ ] Phase 5 active
 
 ## Commit Policy
 
@@ -142,3 +143,4 @@
 - [x] `phase-3: prefer balanced vertical splits and pin two-column reading order`
 - [x] `phase-3: add style-rarity heading cues and keep full heuristic regression green`
 - [x] `phase-4: pin list continuation attachment to the previous list item`
+- [x] `phase-4: pin semantic fixture reconstruction for heading and list output`
