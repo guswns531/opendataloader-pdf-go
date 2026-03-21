@@ -81,6 +81,47 @@ func TestRunFixtureWritesRequestedOutputs(t *testing.T) {
 	}
 }
 
+func TestRunNativeRawFixtureWritesJSONOutput(t *testing.T) {
+	dir := t.TempDir()
+	fixturePath := filepath.Join(dir, "fixture.raw.json")
+	outputDir := filepath.Join(dir, "out")
+	const fixtureJSON = `{
+	  "metadata": {"file_name": "fixture.raw.json", "page_count": 1},
+	  "pages": [
+	    {
+	      "metadata": {"number": 1, "index": 0, "width": 612, "height": 792},
+	      "artifacts": [
+	        {
+	          "kind": "text",
+	          "page_index": 0,
+	          "page_number": 1,
+	          "sequence": 0,
+	          "bounds": {"left": 0, "bottom": 90, "right": 40, "top": 100},
+	          "text": "Hello native fixture",
+	          "style": {"font": "Times", "font_size": 12, "content": "Hello native fixture"}
+	        }
+	      ]
+	    }
+	  ]
+	}`
+	if err := os.WriteFile(fixturePath, []byte(fixtureJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if got := run([]string{
+		"--quiet",
+		"--output-dir", outputDir,
+		fixturePath,
+	}); got != 0 {
+		t.Fatalf("run() = %d, want 0", got)
+	}
+
+	outputPath := filepath.Join(outputDir, "fixture.raw.json")
+	if _, err := os.Stat(outputPath); err != nil {
+		t.Fatalf("expected output file %s: %v", outputPath, err)
+	}
+}
+
 func TestRunPDFWritesJSONOutput(t *testing.T) {
 	outputDir := t.TempDir()
 	inputPath := filepath.Clean("../../samples/pdf/lorem.pdf")
