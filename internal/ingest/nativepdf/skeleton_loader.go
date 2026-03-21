@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 
 	"github.com/guswns531/opendataloader-pdf-go/internal/model"
 )
@@ -52,7 +55,11 @@ func (l *SkeletonLoader) OpenReader(_ context.Context, name string, r io.Reader,
 
 func (l *SkeletonLoader) open(name string, data []byte) DocumentHandle {
 	pages := make([]model.PageMetadata, 0, len(l.pageMetadata))
-	for i, page := range l.pageMetadata {
+	sourcePages := l.pageMetadata
+	if len(sourcePages) == 0 {
+		sourcePages = shellPagesFromPDF(data)
+	}
+	for i, page := range sourcePages {
 		if page.Index == 0 && i > 0 {
 			page.Index = model.PageIndex(i)
 		}
@@ -115,4 +122,89 @@ func (h *skeletonPageHandle) TableCandidates(_ context.Context) (*TableCandidate
 
 func (h *skeletonPageHandle) StructTree(_ context.Context) (*StructNode, error) {
 	return nil, nil
+}
+
+var (
+	pageTypePattern = regexp.MustCompile(`/Type\s*/Page\b`)
+	mediaBoxPattern = regexp.MustCompile(`/MediaBox\s*\[\s*([-+]?[0-9]*\.?[0-9]+)\s+([-+]?[0-9]*\.?[0-9]+)\s+([-+]?[0-9]*\.?[0-9]+)\s+([-+]?[0-9]*\.?[0-9]+)\s*\]`)
+)
+
+func shellPagesFromPDF(data []byte) []model.PageMetadata {
+	if len(data) == 0 {
+		return nil
+	}
+
+	pageCount := len(pageTypePattern.FindAll(data, -1))
+	if pageCount == 0 {
+		return nil
+	}
+
+	sizes := extractMediaBoxSizes(data)
+	pages := make([]model.PageMetadata, 0, pageCount)
+	for i := 0; i < pageCount; i++ {
+		size := model.PageSize{}
+		bounds := model.Box{}
+		if i < len(sizes) {
+			size = sizes[i]
+			if size.Width > 0 || size.Height > 0 {
+				bounds = model.Box{Left: 0, Bottom: 0, Right: size.Width, Top: size.Height}
+			}
+		} else if len(sizes) > 0 {
+			size = sizes[len(sizes)-1]
+			if size.Width > 0 || size.Height > 0 {
+				bounds = model.Box{Left: 0, Bottom: 0, Right: size.Width, Top: size.Height}
+			}
+		}
+
+		pages = append(pages, model.PageMetadata{
+			Index:  model.PageIndex(i),
+			Number: model.PageNumber(i + 1),
+			Size:   size,
+			Bounds: bounds,
+		})
+	}
+	return pages
+}
+
+func extractMediaBoxSizes(data []byte) []model.PageSize {
+	matches := mediaBoxPattern.FindAllSubmatch(data, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	out := make([]model.PageSize, 0, len(matches))
+	for _, match := range matches {
+		if len(match) != 5 {
+			continue
+		}
+		left, ok := parseFloat(match[1])
+		if !ok {
+			continue
+		}
+		bottom, ok := parseFloat(match[2])
+		if !ok {
+			continue
+		}
+		right, ok := parseFloat(match[3])
+		if !ok {
+			continue
+		}
+		top, ok := parseFloat(match[4])
+		if !ok {
+			continue
+		}
+		out = append(out, model.PageSize{
+			Width:  math.Max(0, right-left),
+			Height: math.Max(0, top-bottom),
+		})
+	}
+	return out
+}
+
+func parseFloat(raw []byte) (float64, bool) {
+	value, err := strconv.ParseFloat(string(raw), 64)
+	if err != nil {
+		return 0, false
+	}
+	return value, true
 }

@@ -14,7 +14,7 @@ import (
 func TestSkeletonLoaderOpenReaderBuildsHandleShell(t *testing.T) {
 	loader := NewSkeletonLoader()
 
-	handle, err := loader.OpenReader(context.Background(), "sample.pdf", strings.NewReader("%PDF-1.7"), OpenOptions{})
+	handle, err := loader.OpenReader(context.Background(), "sample.pdf", strings.NewReader(twoPageShellPDF), OpenOptions{})
 	if err != nil {
 		t.Fatalf("OpenReader() error = %v", err)
 	}
@@ -23,11 +23,15 @@ func TestSkeletonLoaderOpenReaderBuildsHandleShell(t *testing.T) {
 	if handle.Metadata().FileName != "sample.pdf" {
 		t.Fatalf("handle.Metadata().FileName = %q, want sample.pdf", handle.Metadata().FileName)
 	}
-	if handle.PageCount() != 0 {
-		t.Fatalf("handle.PageCount() = %d, want 0", handle.PageCount())
+	if handle.PageCount() != 2 {
+		t.Fatalf("handle.PageCount() = %d, want 2", handle.PageCount())
 	}
-	if _, err := handle.Page(0); err == nil {
-		t.Fatal("handle.Page(0) error = nil, want error")
+	page, err := handle.Page(0)
+	if err != nil {
+		t.Fatalf("handle.Page(0) error = %v", err)
+	}
+	if page.Metadata().Size.Width != 612 || page.Metadata().Size.Height != 792 {
+		t.Fatalf("page.Metadata().Size = %#v, want 612x792", page.Metadata().Size)
 	}
 }
 
@@ -35,7 +39,7 @@ func TestSkeletonLoaderOpenPathBuildsHandleShell(t *testing.T) {
 	loader := NewSkeletonLoader()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "from-disk.pdf")
-	if err := os.WriteFile(path, []byte("%PDF-1.7"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(onePageShellPDF), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -47,6 +51,9 @@ func TestSkeletonLoaderOpenPathBuildsHandleShell(t *testing.T) {
 
 	if handle.Metadata().FileName != "from-disk.pdf" {
 		t.Fatalf("handle.Metadata().FileName = %q, want from-disk.pdf", handle.Metadata().FileName)
+	}
+	if handle.PageCount() != 1 {
+		t.Fatalf("handle.PageCount() = %d, want 1", handle.PageCount())
 	}
 }
 
@@ -97,3 +104,12 @@ func TestSkeletonLoaderWorksThroughNativeIngestorWithPageShells(t *testing.T) {
 		t.Fatalf("document.Pages[0].Metadata.Number = %d, want 1", document.Pages[0].Metadata.Number)
 	}
 }
+
+const onePageShellPDF = `%PDF-1.7
+1 0 obj << /Type /Page /MediaBox [0 0 612 792] >> endobj
+`
+
+const twoPageShellPDF = `%PDF-1.7
+1 0 obj << /Type /Page /MediaBox [0 0 612 792] >> endobj
+2 0 obj << /Type /Page /MediaBox [0 0 612 792] >> endobj
+`
