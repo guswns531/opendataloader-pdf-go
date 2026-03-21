@@ -134,3 +134,38 @@ func TestProcessingOptionsUsesNormalizedFormats(t *testing.T) {
 		t.Fatalf("RequestedFormats = %v, want %v", cfg.RequestedFormats, wantFormats)
 	}
 }
+
+func TestParseNormalizesLegacyFormatFlags(t *testing.T) {
+	opts, err := Parse([]string{
+		"--markdown",
+		"--html",
+		"--no-json",
+		"input.pdf",
+	})
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if opts.Format != "markdown,html" {
+		t.Fatalf("Format = %q, want markdown,html", opts.Format)
+	}
+}
+
+func TestParseRejectsInvalidTableMethod(t *testing.T) {
+	if _, err := Parse([]string{"--table-method", "bogus", "input.pdf"}); err == nil {
+		t.Fatal("Parse() error = nil, want error")
+	}
+}
+
+func TestParseRejectsInvalidFormatValue(t *testing.T) {
+	if _, err := Parse([]string{"--format", "json,unknown", "input.pdf"}); err == nil {
+		t.Fatal("Parse() error = nil, want error")
+	}
+}
+
+func TestUnsupportedFormatsIdentifiesKnownGapValues(t *testing.T) {
+	got := UnsupportedFormats("json,pdf,markdown-with-html,markdown-with-images")
+	want := []string{"pdf", "markdown-with-html", "markdown-with-images"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("UnsupportedFormats() = %v, want %v", got, want)
+	}
+}

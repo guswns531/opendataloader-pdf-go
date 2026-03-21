@@ -44,6 +44,7 @@ This document freezes the compatibility surface for the Pure Go local-core migra
 | `--output-dir`, `-o` | Implemented | Output path is honored |
 | `--format`, `-f` for `json`, `markdown`, `html`, `text` | Implemented | Unsupported formats are silently dropped today |
 | `--quiet`, `-q` | Implemented | Console logging suppression works |
+| `--export-options` | Implemented | Exports the checked-in options contract JSON |
 | `--pages` | Implemented | Parsed and applied after pipeline run |
 | `--sanitize` | Implemented | Sanitization filter runs |
 | `--replace-invalid-chars` | Implemented | Text cleaner applies replacement |
@@ -51,6 +52,7 @@ This document freezes the compatibility surface for the Pure Go local-core migra
 | `--reading-order` | Implemented | `xycut` and `off` behavior exists |
 | `--table-method` | Partial | Heuristic toggle exists, but not Java parity |
 | `--content-safety-off` | Partial | Only layout-filter gating is wired, not full Java behavior |
+| no-input help/exit behavior | Implemented | Usage/help now exits successfully instead of parse-failure style |
 
 ### Parsed But Not Functionally Delivered
 

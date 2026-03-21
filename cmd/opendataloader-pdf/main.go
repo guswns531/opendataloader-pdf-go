@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,9 +36,16 @@ func run(args []string) int {
 		fmt.Println(version)
 		return 0
 	}
+	if opts.ExportOptions {
+		if err := exportOptionsJSON(os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "export-options failed: %v\n", err)
+			return 1
+		}
+		return 0
+	}
 	if len(opts.Inputs) == 0 {
 		printUsage()
-		return 2
+		return 0
 	}
 
 	inputs, err := discovery.Discover(opts.Inputs)
@@ -78,6 +86,9 @@ func pipelineForInput(path string, useFixture bool) (*local.Pipeline, error) {
 }
 
 func processInput(input string, opts clioptions.Options, pages []int) error {
+	if unsupported := clioptions.UnsupportedFormats(opts.Format); len(unsupported) > 0 {
+		return fmt.Errorf("unsupported format(s) in pure go CLI: %s", strings.Join(unsupported, ","))
+	}
 	options := opts.ProcessingOptions(input)
 	if len(pages) > 0 {
 		if options.Extras == nil {
@@ -127,6 +138,32 @@ func printUsage() {
 	fs.SetOutput(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Usage: opendataloader-pdf [options] <INPUT FILE OR FOLDER>...")
 	fs.PrintDefaults()
+}
+
+func exportOptionsJSON(w io.Writer) error {
+	path, err := locateOptionsJSON()
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
+}
+
+func locateOptionsJSON() (string, error) {
+	candidates := []string{
+		"options.json",
+		filepath.Clean("../../options.json"),
+	}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("options.json not found")
 }
 
 func countArtifacts(document *model.Document) int {

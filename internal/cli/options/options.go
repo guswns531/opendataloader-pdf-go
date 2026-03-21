@@ -2,8 +2,10 @@ package options
 
 import (
 	"flag"
+	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/guswns531/opendataloader-pdf-go/internal/core"
@@ -24,11 +26,12 @@ const (
 // Options captures the CLI flags we can parse today, plus parity placeholders
 // that are recognized but not yet consumed by the Go skeleton.
 type Options struct {
-	OutputDir string
-	Format    string
-	Quiet     bool
-	Fixture   bool
-	Version   bool
+	OutputDir     string
+	Format        string
+	Quiet         bool
+	Fixture       bool
+	Version       bool
+	ExportOptions bool
 
 	Password              string
 	ContentSafetyOff      string
@@ -53,6 +56,13 @@ type Options struct {
 	HybridTimeout         string
 	HybridFallback        bool
 
+	LegacyPDF               bool
+	LegacyMarkdown          bool
+	LegacyHTML              bool
+	LegacyMarkdownWithHTML  bool
+	LegacyMarkdownWithImage bool
+	LegacyNoJSON            bool
+
 	Inputs []string
 }
 
@@ -74,6 +84,7 @@ func NewFlagSet(name string) (*flag.FlagSet, *Options) {
 	fs.BoolVar(&opts.Quiet, "q", opts.Quiet, "Suppress console logging output")
 	fs.BoolVar(&opts.Fixture, "fixture", opts.Fixture, "Treat input JSON as a document fixture.")
 	fs.BoolVar(&opts.Version, "version", opts.Version, "Print version and exit.")
+	fs.BoolVar(&opts.ExportOptions, "export-options", opts.ExportOptions, "Export CLI options as JSON and exit.")
 
 	fs.StringVar(&opts.ContentSafetyOff, "content-safety-off", opts.ContentSafetyOff, "Disable content safety filters. Values: all, hidden-text, off-page, tiny, hidden-ocg")
 	fs.BoolVar(&opts.Sanitize, "sanitize", opts.Sanitize, "Enable sensitive data sanitization. Replaces emails, phone numbers, IPs, credit cards, and URLs with placeholders")
@@ -97,6 +108,13 @@ func NewFlagSet(name string) (*flag.FlagSet, *Options) {
 	fs.StringVar(&opts.HybridTimeout, "hybrid-timeout", opts.HybridTimeout, "Hybrid backend request timeout in milliseconds. Default: 30000")
 	fs.BoolVar(&opts.HybridFallback, "hybrid-fallback", opts.HybridFallback, "Opt in to Java fallback on hybrid backend error (default: disabled)")
 
+	fs.BoolVar(&opts.LegacyPDF, "pdf", opts.LegacyPDF, "Legacy alias for --format=pdf")
+	fs.BoolVar(&opts.LegacyMarkdown, "markdown", opts.LegacyMarkdown, "Legacy alias for --format=markdown")
+	fs.BoolVar(&opts.LegacyHTML, "html", opts.LegacyHTML, "Legacy alias for --format=html")
+	fs.BoolVar(&opts.LegacyMarkdownWithHTML, "markdown-with-html", opts.LegacyMarkdownWithHTML, "Legacy alias for --format=markdown-with-html")
+	fs.BoolVar(&opts.LegacyMarkdownWithImage, "markdown-with-images", opts.LegacyMarkdownWithImage, "Legacy alias for --format=markdown-with-images")
+	fs.BoolVar(&opts.LegacyNoJSON, "no-json", opts.LegacyNoJSON, "Legacy toggle to disable json output")
+
 	return fs, &opts
 }
 
@@ -104,6 +122,10 @@ func NewFlagSet(name string) (*flag.FlagSet, *Options) {
 func Parse(args []string) (Options, error) {
 	fs, opts := NewFlagSet("opendataloader-pdf")
 	if err := fs.Parse(args); err != nil {
+		return Options{}, err
+	}
+	opts.normalizeLegacyFlags()
+	if err := opts.validate(); err != nil {
 		return Options{}, err
 	}
 	opts.Inputs = append([]string(nil), fs.Args()...)
@@ -137,6 +159,19 @@ func ParseFormats(value string) []core.OutputFormat {
 	return formats
 }
 
+// UnsupportedFormats returns format values that are valid in the public CLI
+// contract but are not implemented by the current Go emitters yet.
+func UnsupportedFormats(value string) []string {
+	unsupported := make([]string, 0)
+	for _, candidate := range splitOptionValues(value) {
+		switch candidate {
+		case "pdf", "markdown-with-html", "markdown-with-images":
+			unsupported = append(unsupported, candidate)
+		}
+	}
+	return unsupported
+}
+
 // ProcessingOptions builds the core processing options used by the pipeline.
 func (o Options) ProcessingOptions(inputPath string) core.ProcessingOptions {
 	documentName := ""
@@ -163,6 +198,114 @@ func (o Options) ProcessingOptions(inputPath string) core.ProcessingOptions {
 		RequestedFormats: ParseFormats(o.Format),
 		Extras:           extras,
 	}
+}
+
+func (o *Options) normalizeLegacyFlags() {
+	values := splitOptionValues(o.Format)
+	add := func(value string) {
+		if !slices.Contains(values, value) {
+			values = append(values, value)
+		}
+	}
+	if o.LegacyNoJSON {
+		values = withoutValue(values, "json")
+	}
+	if o.LegacyPDF {
+		add("pdf")
+	}
+	if o.LegacyMarkdown {
+		add("markdown")
+	}
+	if o.LegacyHTML {
+		add("html")
+	}
+	if o.LegacyMarkdownWithHTML {
+		add("markdown-with-html")
+	}
+	if o.LegacyMarkdownWithImage {
+		add("markdown-with-images")
+	}
+	if len(values) > 0 {
+		o.Format = strings.Join(values, ",")
+	}
+}
+
+func (o Options) validate() error {
+	if err := validateFormats(o.Format); err != nil {
+		return err
+	}
+	if err := validateEnum("table-method", o.TableMethod, []string{"default", "cluster"}); err != nil {
+		return err
+	}
+	if err := validateEnum("reading-order", o.ReadingOrder, []string{"off", "xycut"}); err != nil {
+		return err
+	}
+	if err := validateEnum("image-output", o.ImageOutput, []string{"off", "embedded", "external"}); err != nil {
+		return err
+	}
+	if err := validateEnum("image-format", o.ImageFormat, []string{"png", "jpeg"}); err != nil {
+		return err
+	}
+	if err := validateEnum("hybrid", o.Hybrid, []string{"off", "docling-fast"}); err != nil {
+		return err
+	}
+	if err := validateEnum("hybrid-mode", o.HybridMode, []string{"auto", "full"}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateFormats(value string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	allowed := []string{"json", "text", "html", "pdf", "markdown", "markdown-with-html", "markdown-with-images"}
+	values := splitOptionValues(value)
+	if len(values) == 0 {
+		return fmt.Errorf("option --format requires at least one value. Supported values: %s", strings.Join(allowed, ", "))
+	}
+	for _, candidate := range values {
+		if !slices.Contains(allowed, candidate) {
+			return fmt.Errorf("unsupported format %q. Supported values: %s", candidate, strings.Join(allowed, ", "))
+		}
+	}
+	return nil
+}
+
+func validateEnum(name, value string, allowed []string) error {
+	if strings.TrimSpace(value) == "" {
+		return fmt.Errorf("option --%s requires a value. Supported values: %s", name, strings.Join(allowed, ", "))
+	}
+	normalized := strings.TrimSpace(strings.ToLower(value))
+	if !slices.Contains(allowed, normalized) {
+		return fmt.Errorf("unsupported %s %q. Supported values: %s", name, value, strings.Join(allowed, ", "))
+	}
+	return nil
+}
+
+func splitOptionValues(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	out := make([]string, 0)
+	for _, raw := range strings.Split(value, ",") {
+		normalized := strings.TrimSpace(strings.ToLower(raw))
+		if normalized == "" {
+			continue
+		}
+		out = append(out, normalized)
+	}
+	return out
+}
+
+func withoutValue(values []string, value string) []string {
+	filtered := make([]string, 0, len(values))
+	for _, candidate := range values {
+		if candidate != value {
+			filtered = append(filtered, candidate)
+		}
+	}
+	return filtered
 }
 
 func defaultOptions() Options {

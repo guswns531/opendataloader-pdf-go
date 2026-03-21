@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +35,23 @@ func TestRunFixtureMode(t *testing.T) {
 
 	if got := run([]string{"--fixture", "--quiet", fixturePath}); got != 0 {
 		t.Fatalf("run() = %d, want 0", got)
+	}
+}
+
+func TestRunWithoutInputsPrintsUsageAndSucceeds(t *testing.T) {
+	if got := run(nil); got != 0 {
+		t.Fatalf("run() = %d, want 0", got)
+	}
+}
+
+func TestRunExportOptionsWritesJSONAndSucceeds(t *testing.T) {
+	output := captureStdout(t, func() {
+		if got := run([]string{"--export-options"}); got != 0 {
+			t.Fatalf("run() = %d, want 0", got)
+		}
+	})
+	if !strings.Contains(output, `"options"`) {
+		t.Fatalf("stdout = %q, want exported options json", output)
 	}
 }
 
@@ -122,6 +140,66 @@ func TestRunNativeRawFixtureWritesJSONOutput(t *testing.T) {
 	}
 }
 
+func TestRunLegacyMarkdownNoJSONWritesOnlyMarkdown(t *testing.T) {
+	dir := t.TempDir()
+	fixturePath := filepath.Join(dir, "legacy_fixture.json")
+	outputDir := filepath.Join(dir, "out")
+	const fixtureJSON = `{
+	  "metadata": {"file_name": "legacy_fixture.json", "page_count": 1},
+	  "pages": [
+	    {
+	      "metadata": {"number": 1, "index": 0},
+	      "artifacts": [
+	        {
+	          "kind": "text",
+	          "page_index": 0,
+	          "page_number": 1,
+	          "sequence": 0,
+	          "bounds": {"left": 0, "bottom": 90, "right": 40, "top": 100},
+	          "text": "Legacy markdown"
+	        }
+	      ]
+	    }
+	  ]
+	}`
+	if err := os.WriteFile(fixturePath, []byte(fixtureJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if got := run([]string{
+		"--quiet",
+		"--output-dir", outputDir,
+		"--markdown",
+		"--no-json",
+		fixturePath,
+	}); got != 0 {
+		t.Fatalf("run() = %d, want 0", got)
+	}
+
+	if _, err := os.Stat(filepath.Join(outputDir, "legacy_fixture.md")); err != nil {
+		t.Fatalf("expected markdown output: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "legacy_fixture.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected json output to be absent, got err=%v", err)
+	}
+}
+
+func TestRunRejectsUnsupportedLegacyPDFOutput(t *testing.T) {
+	dir := t.TempDir()
+	fixturePath := filepath.Join(dir, "unsupported_fixture.json")
+	const fixtureJSON = `{
+	  "metadata": {"file_name": "unsupported_fixture.json", "page_count": 1},
+	  "pages": []
+	}`
+	if err := os.WriteFile(fixturePath, []byte(fixtureJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if got := run([]string{"--quiet", "--pdf", fixturePath}); got != 1 {
+		t.Fatalf("run() = %d, want 1", got)
+	}
+}
+
 func TestRunPDFWritesJSONOutput(t *testing.T) {
 	outputDir := t.TempDir()
 	inputPath := filepath.Clean("../../samples/pdf/lorem.pdf")
@@ -138,6 +216,28 @@ func TestRunPDFWritesJSONOutput(t *testing.T) {
 	if _, err := os.Stat(outputPath); err != nil {
 		t.Fatalf("expected output file %s: %v", outputPath, err)
 	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	original := os.Stdout
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Pipe() error = %v", err)
+	}
+	os.Stdout = writer
+	defer func() { os.Stdout = original }()
+
+	fn()
+
+	if err := writer.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+	return string(data)
 }
 
 func TestRunDirectoryDiscoversSupportedInputs(t *testing.T) {

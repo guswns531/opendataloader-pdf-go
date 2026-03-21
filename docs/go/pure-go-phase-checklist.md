@@ -132,4 +132,6 @@
 - [x] `phase-1: disable unsafe raw literal fallback on stream-backed real PDFs`
 - [x] `phase-1: decode ToUnicode-mapped hex TJ runs and emit first real lorem paragraph`
 - [x] `phase-1: pin lorem.pdf native-skeleton paragraph smoke`
+- [x] `phase-2: add schema validation coverage`
+- [x] `phase-2: close first CLI parity bundle (legacy flags, enum validation, no-args, export-options)`
 - [x] `phase-2: validate schemajson output against published schema`
