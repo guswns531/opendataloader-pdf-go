@@ -70,12 +70,6 @@ def convert(
     """
     args: List[str] = []
 
-    # Build input paths
-    if isinstance(input_path, list):
-        args.extend(input_path)
-    else:
-        args.append(input_path)
-
     if output_dir:
         args.extend(["--output-dir", output_dir])
     if password:
@@ -134,5 +128,11 @@ def convert(
         args.extend(["--hybrid-timeout", hybrid_timeout])
     if hybrid_fallback:
         args.append("--hybrid-fallback")
+
+    # Positional inputs go last so both Java CLI and Go CLI parse options consistently.
+    if isinstance(input_path, list):
+        args.extend(input_path)
+    else:
+        args.append(input_path)
 
     run_jar(args, quiet)

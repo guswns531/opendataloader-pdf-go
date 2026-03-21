@@ -22,16 +22,22 @@ function executeJar(args: string[], executionOptions: JarExecutionOptions = {}):
   const { streamOutput = false } = executionOptions;
 
   return new Promise((resolve, reject) => {
-    const jarPath = path.join(__dirname, '..', 'lib', JAR_NAME);
+    const binaryOverride = process.env.OPENDATALOADER_PDF_CLI_BIN || process.env.OPENDATALOADER_GO_BIN;
+    let command = 'java';
+    let commandArgs = ['-jar', '', ...args];
 
-    if (!fs.existsSync(jarPath)) {
-      return reject(
-        new Error(`JAR file not found at ${jarPath}. Please run the build script first.`),
-      );
+    if (binaryOverride) {
+      command = binaryOverride;
+      commandArgs = args;
+    } else {
+      const jarPath = path.join(__dirname, '..', 'lib', JAR_NAME);
+      if (!fs.existsSync(jarPath)) {
+        return reject(
+          new Error(`JAR file not found at ${jarPath}. Please run the build script first.`),
+        );
+      }
+      commandArgs = ['-jar', jarPath, ...args];
     }
-
-    const command = 'java';
-    const commandArgs = ['-jar', jarPath, ...args];
 
     const javaProcess = spawn(command, commandArgs);
 
@@ -95,7 +101,7 @@ export function convert(
     }
   }
 
-  const args: string[] = [...inputList, ...buildArgs(options)];
+  const args: string[] = [...buildArgs(options), ...inputList];
 
   return executeJar(args, {
     streamOutput: !options.quiet,

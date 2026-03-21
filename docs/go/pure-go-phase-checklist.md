@@ -44,10 +44,10 @@
 
 ### Phase 2: CLI and Emitter Parity on Fixtures
 
-- [ ] Reach CLI parity for traversal, defaults, validation, output naming, and exit codes.
-- [ ] Make Markdown, HTML, text, and schema JSON emit against the Go model.
-- [ ] Add schema validation tests for Go JSON output.
-- [ ] Rebind benchmark and wrapper smoke tests to the Go CLI path only.
+- [x] Reach CLI parity for traversal, defaults, validation, output naming, and exit codes.
+- [x] Make Markdown, HTML, text, and schema JSON emit against the Go model.
+- [x] Add schema validation tests for Go JSON output.
+- [x] Rebind benchmark and wrapper smoke tests to the Go CLI path only.
 
 ### Phase 3: Directly Portable Deterministic Heuristics
 
@@ -102,7 +102,8 @@
 
 - [x] Phase 0 complete
 - [x] Phase 1 complete
-- [ ] Phase 2 active
+- [x] Phase 2 complete
+- [ ] Phase 3 active
 
 ## Commit Policy
 
@@ -134,4 +135,6 @@
 - [x] `phase-1: pin lorem.pdf native-skeleton paragraph smoke`
 - [x] `phase-2: add schema validation coverage`
 - [x] `phase-2: close first CLI parity bundle (legacy flags, enum validation, no-args, export-options)`
+- [x] `phase-2: route Python and Node wrapper smoke through Go override`
+- [x] `phase-2: let Python/Node wrapper smoke target a Go CLI binary via env override`
 - [x] `phase-2: validate schemajson output against published schema`

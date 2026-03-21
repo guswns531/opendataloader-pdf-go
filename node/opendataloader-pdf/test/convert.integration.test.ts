@@ -6,6 +6,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { convert } from '../src/index';
 import * as path from 'path';
 import * as fs from 'fs';
+import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -14,6 +15,7 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..', '..', '..');
 const inputPdf = path.join(rootDir, 'samples', 'pdf', '1901.03003.pdf');
 const tempDir = path.join(__dirname, 'temp', 'convert');
+const goBin = path.join(tempDir, 'opendataloader-pdf');
 
 describe('convert() integration', () => {
   beforeAll(() => {
@@ -21,9 +23,12 @@ describe('convert() integration', () => {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
     fs.mkdirSync(tempDir, { recursive: true });
+    execFileSync('go', ['build', '-o', goBin, './cmd/opendataloader-pdf'], { cwd: rootDir });
+    process.env.OPENDATALOADER_PDF_CLI_BIN = goBin;
   });
 
   afterAll(() => {
+    delete process.env.OPENDATALOADER_PDF_CLI_BIN;
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
