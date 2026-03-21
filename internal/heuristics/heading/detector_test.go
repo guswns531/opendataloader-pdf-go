@@ -87,6 +87,23 @@ func TestDetectAssignsSameLevelToSameSizeHeadings(t *testing.T) {
 	assertLevel(t, byText, "Details", 2)
 }
 
+func TestDetectUsesRareSizeBucketAsAdditionalHeadingCue(t *testing.T) {
+	elements := []model.ContentElement{
+		paragraph(1, "Body paragraph one with normal dominant style.", 10, false, model.NewBox(48, 640, 520, 660)),
+		paragraph(2, "Body paragraph two keeps the same body font size.", 10, false, model.NewBox(48, 610, 520, 630)),
+		paragraph(3, "Body paragraph three still dominates the page style.", 10, false, model.NewBox(48, 580, 520, 600)),
+		paragraph(4, "Methods", 12, false, model.NewBox(48, 710, 220, 728)),
+	}
+
+	detections := Detect(elements)
+	if got, want := len(detections), 1; got != want {
+		t.Fatalf("detections = %d, want %d", got, want)
+	}
+	if got := detections[0].Heading.Content; got != "Methods" {
+		t.Fatalf("detected heading = %q, want %q", got, "Methods")
+	}
+}
+
 func assertLevel(t *testing.T, byText map[string]Detection, text string, want int) {
 	t.Helper()
 	detection, ok := byText[text]

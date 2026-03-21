@@ -66,6 +66,7 @@ func (d Detector) Detect(elements []model.ContentElement) []Detection {
 	ordered := readingorder.Sort(elements)
 	fontBaseline := dominantFontSize(ordered, d.SizeBucketStep)
 	pageStats := collectPageStats(ordered)
+	stats := collectStyleStats(ordered, d.SizeBucketStep)
 
 	candidates := make([]candidate, 0, len(ordered))
 	for i, element := range ordered {
@@ -75,6 +76,7 @@ func (d Detector) Detect(elements []model.ContentElement) []Detection {
 		}
 		cand.baselineFontSize = fontBaseline
 		cand.pageStats = pageStats[cand.pageIndex]
+		cand.styleStats = stats
 		cand.score = scoreCandidate(cand, d)
 		if cand.score < d.MinScore {
 			continue
@@ -114,6 +116,7 @@ type candidate struct {
 	endsWithSentence bool
 	baselineFontSize float64
 	pageStats        *pageStats
+	styleStats       styleStats
 	score            float64
 	existingLevel    int
 	originalIndex    int
@@ -129,6 +132,12 @@ type pageStats struct {
 	maxRight  float64
 	minBottom float64
 	maxTop    float64
+}
+
+type styleStats struct {
+	total       int
+	sizeBuckets map[float64]int
+	boldCount   int
 }
 
 var numberedHeadingPattern = regexp.MustCompile(`^(?:\d+(?:\.\d+)*|[IVXLCDM]+|[A-Z])(?:[.)])?\s+`)
@@ -261,6 +270,12 @@ func scoreCandidate(cand candidate, d Detector) float64 {
 	if widthShare := cand.widthShare(); widthShare >= 0.35 {
 		score += d.WidthShareBoost
 	}
+	if cand.rareSizeBucket() {
+		score += 0.08
+	}
+	if cand.bold && cand.rareBoldStyle() {
+		score += 0.04
+	}
 
 	switch {
 	case cand.wordCount <= 4:
@@ -278,6 +293,43 @@ func scoreCandidate(cand candidate, d Detector) float64 {
 	}
 
 	return score
+}
+
+func collectStyleStats(elements []model.ContentElement, bucketStep float64) styleStats {
+	stats := styleStats{
+		sizeBuckets: make(map[float64]int),
+	}
+	for _, element := range elements {
+		cand, ok := buildCandidate(element, 0)
+		if !ok {
+			continue
+		}
+		stats.total++
+		stats.sizeBuckets[bucketFontSize(cand.fontSize, bucketStep)]++
+		if cand.bold {
+			stats.boldCount++
+		}
+	}
+	return stats
+}
+
+func (cand candidate) rareSizeBucket() bool {
+	if cand.styleStats.total == 0 {
+		return false
+	}
+	bucket := bucketFontSize(cand.fontSize, 0.5)
+	count := cand.styleStats.sizeBuckets[bucket]
+	if count == 0 {
+		return false
+	}
+	return float64(count)/float64(cand.styleStats.total) <= 0.25
+}
+
+func (cand candidate) rareBoldStyle() bool {
+	if cand.styleStats.total == 0 || cand.styleStats.boldCount == 0 {
+		return false
+	}
+	return float64(cand.styleStats.boldCount)/float64(cand.styleStats.total) <= 0.25
 }
 
 func assignHeadingLevels(candidates []candidate, sizeBucketStep float64) {

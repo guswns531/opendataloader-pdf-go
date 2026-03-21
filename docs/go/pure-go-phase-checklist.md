@@ -51,10 +51,10 @@
 
 ### Phase 3: Directly Portable Deterministic Heuristics
 
-- [ ] Port and harden reading order.
-- [ ] Port utility-level statistics and bullet/list helper logic.
-- [ ] Improve chunk-to-line and line-to-paragraph grouping using fixture goldens.
-- [ ] Build style-statistics support needed later by heading and level detection.
+- [x] Port and harden reading order.
+- [x] Port utility-level statistics and bullet/list helper logic.
+- [x] Improve chunk-to-line and line-to-paragraph grouping using fixture goldens.
+- [x] Build style-statistics support needed later by heading and level detection.
 
 ### Phase 4: Model-Coupled Semantic Processors
 
@@ -103,7 +103,8 @@
 - [x] Phase 0 complete
 - [x] Phase 1 complete
 - [x] Phase 2 complete
-- [ ] Phase 3 active
+- [x] Phase 3 complete
+- [ ] Phase 4 active
 
 ## Commit Policy
 
@@ -139,3 +140,4 @@
 - [x] `phase-2: let Python/Node wrapper smoke target a Go CLI binary via env override`
 - [x] `phase-2: validate schemajson output against published schema`
 - [x] `phase-3: prefer balanced vertical splits and pin two-column reading order`
+- [x] `phase-3: add style-rarity heading cues and keep full heuristic regression green`

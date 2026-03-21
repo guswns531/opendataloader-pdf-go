@@ -7,7 +7,8 @@ This document freezes the compatibility surface for the Pure Go local-core migra
 
 - Phase 1 foundation: complete
 - Phase 2 CLI/emitter parity on fixtures: complete
-- Current active focus: Phase 3 deterministic heuristics
+- Phase 3 deterministic heuristics: complete
+- Current active focus: Phase 4 semantic processors
 
 ## MVP Contract Sources
 
