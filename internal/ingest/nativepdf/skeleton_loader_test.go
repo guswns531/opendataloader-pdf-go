@@ -196,6 +196,61 @@ func TestSkeletonLoaderDerivesTextArtifactsFromFlateStream(t *testing.T) {
 	}
 }
 
+func TestSkeletonLoaderDerivesTextArtifactsFromToUnicodeMappedHexTJ(t *testing.T) {
+	var cmap bytes.Buffer
+	cmapWriter := zlib.NewWriter(&cmap)
+	if _, err := cmapWriter.Write([]byte(`/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+3 beginbfchar
+<0003> <004c>
+<0006> <006f>
+<0007> <0072>
+endbfchar
+endcmap
+end
+end`)); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if err := cmapWriter.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	var content bytes.Buffer
+	contentWriter := zlib.NewWriter(&content)
+	if _, err := contentWriter.Write([]byte("BT [<0003><0006><0007>]TJ ET")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if err := contentWriter.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	pdf := "%PDF-1.7\n" +
+		"1 0 obj << /Type /Page /MediaBox [0 0 612 792] >> endobj\n" +
+		"2 0 obj << /Filter /FlateDecode /ToUnicode 3 0 R >>stream\n" +
+		cmap.String() + "\nendstream\n" +
+		"3 0 obj << /Filter /FlateDecode >>stream\n" +
+		content.String() + "\nendstream\n"
+
+	ingestor := NewIngestor(NewSkeletonLoader())
+	document, err := ingestor.Ingest(nil, core.Source{
+		Name:   "cmap.pdf",
+		Reader: strings.NewReader(pdf),
+	})
+	if err != nil {
+		t.Fatalf("Ingest() error = %v", err)
+	}
+	if len(document.Pages) != 1 || len(document.Pages[0].Artifacts) != 1 {
+		t.Fatalf("document pages/artifacts = %d/%d, want 1/1", len(document.Pages), len(document.Pages[0].Artifacts))
+	}
+	if got, want := document.Pages[0].Artifacts[0].Text, "Lor"; got != want {
+		t.Fatalf("artifact text = %q, want %q", got, want)
+	}
+}
+
 const onePageShellPDF = `%PDF-1.7
 1 0 obj << /Type /Page /MediaBox [0 0 612 792] >> endobj
 (Hello)
