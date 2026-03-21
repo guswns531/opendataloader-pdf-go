@@ -117,3 +117,4 @@
 - [x] `phase-1: split runtime selection out of cmd and isolate pdftext as a bridge`
 - [x] `phase-1: prefer native backend and keep pdftext as fallback bridge`
 - [x] `phase-1: native pdf path now flows through a loader placeholder via nativepdf.NewIngestor(loader)`
+- [x] `phase-1: add real native pdf loader skeleton and handle shell`
