@@ -3,6 +3,7 @@ package local
 import (
 	"bytes"
 	"compress/zlib"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -71,6 +72,32 @@ func TestPipelineBuildsParagraphFromCompressedNativeSkeletonPDF(t *testing.T) {
 	}
 	if !strings.Contains(para.Content, "Compressed Native Pipeline") {
 		t.Fatalf("paragraph content = %q", para.Content)
+	}
+}
+
+func TestPipelineBuildsParagraphFromSampleLoremPDFWithNativeSkeleton(t *testing.T) {
+	pipeline := New(nativepdf.NewIngestor(nativepdf.NewSkeletonLoader()))
+	ctx := core.NewProcessingContext(nil, core.ProcessingOptions{})
+
+	document, err := pipeline.Run(ctx, core.Source{
+		Path: filepath.Clean("../../../samples/pdf/lorem.pdf"),
+		Name: "lorem.pdf",
+	}, nil)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(document.Pages) != 1 {
+		t.Fatalf("len(document.Pages) = %d, want 1", len(document.Pages))
+	}
+	if len(document.Kids) == 0 {
+		t.Fatal("len(document.Kids) = 0, want non-zero")
+	}
+	para, ok := document.Kids[0].(*model.Paragraph)
+	if !ok {
+		t.Fatalf("document.Kids[0] type = %T, want *model.Paragraph", document.Kids[0])
+	}
+	if !strings.Contains(para.Content, "Lorem") {
+		t.Fatalf("paragraph content = %q, want Lorem...", para.Content)
 	}
 }
 
