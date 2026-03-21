@@ -61,6 +61,7 @@ type splitCandidate struct {
 	gap      float64
 	span     float64
 	validity float64
+	balance  float64
 }
 
 func sortItems(items []sortableElement) []sortableElement {
@@ -96,33 +97,74 @@ func bestSplit(items []sortableElement) (splitCandidate, bool) {
 		return splitCandidate{}, false
 	}
 
-	var (
-		candidate splitCandidate
-		ok        bool
-	)
-
+	candidates := make([]splitCandidate, 0, 2)
+	var vertical *splitCandidate
 	if xOK {
 		score := xGap / xSpan
 		if score >= splitRatio {
-			candidate = splitCandidate{axis: axisVertical, cut: xCut, gap: xGap, span: xSpan, validity: score}
-			ok = true
+			if candidate, ok := scoredCandidate(items, splitCandidate{
+				axis: axisVertical, cut: xCut, gap: xGap, span: xSpan, validity: score,
+			}); ok {
+				candidates = append(candidates, candidate)
+				vertical = &candidates[len(candidates)-1]
+			}
 		}
 	}
 	if yOK {
 		score := yGap / ySpan
-		if score >= splitRatio && (!ok || score > candidate.validity) {
-			candidate = splitCandidate{axis: axisHorizontal, cut: yCut, gap: yGap, span: ySpan, validity: score}
-			ok = true
+		if score >= splitRatio {
+			if candidate, ok := scoredCandidate(items, splitCandidate{
+				axis: axisHorizontal, cut: yCut, gap: yGap, span: ySpan, validity: score,
+			}); ok {
+				candidates = append(candidates, candidate)
+			}
 		}
 	}
 
-	if !ok {
+	if len(candidates) == 0 {
 		return splitCandidate{}, false
 	}
-	return candidate, true
+	if vertical != nil && vertical.balance >= 0.25 {
+		return *vertical, true
+	}
+
+	best := candidates[0]
+	for _, candidate := range candidates[1:] {
+		if candidateScore(candidate) > candidateScore(best) {
+			best = candidate
+		}
+	}
+	return best, true
 }
 
 const splitRatio = 0.12
+const verticalBalanceBonus = 0.08
+
+func scoredCandidate(items []sortableElement, candidate splitCandidate) (splitCandidate, bool) {
+	left, right, ok := partition(items, candidate)
+	if !ok || len(left) == 0 || len(right) == 0 {
+		return splitCandidate{}, false
+	}
+	candidate.balance = partitionBalance(len(left), len(right))
+	return candidate, true
+}
+
+func candidateScore(candidate splitCandidate) float64 {
+	score := candidate.validity + candidate.balance*0.05
+	if candidate.axis == axisVertical && candidate.balance >= 0.25 {
+		score += verticalBalanceBonus
+	}
+	return score
+}
+
+func partitionBalance(left, right int) float64 {
+	total := left + right
+	if total == 0 {
+		return 0
+	}
+	smaller := math.Min(float64(left), float64(right))
+	return smaller / float64(total)
+}
 
 func largestGap(items []sortableElement, horizontal bool) (gap, cut, span float64, ok bool) {
 	intervals := make([]interval, 0, len(items))

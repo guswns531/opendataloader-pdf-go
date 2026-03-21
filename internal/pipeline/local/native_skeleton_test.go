@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -98,6 +99,47 @@ func TestPipelineBuildsParagraphFromSampleLoremPDFWithNativeSkeleton(t *testing.
 	}
 	if !strings.Contains(para.Content, "Lorem") {
 		t.Fatalf("paragraph content = %q, want Lorem...", para.Content)
+	}
+}
+
+func TestPipelineOrdersTwoColumnNativeRawFixtureByColumns(t *testing.T) {
+	pipeline := New(nativepdf.NewIngestor(nativepdf.NewFixtureLoader()))
+	ctx := core.NewProcessingContext(nil, core.ProcessingOptions{})
+
+	document, err := pipeline.Run(ctx, core.Source{
+		Path: filepath.Clean("../../../testdata/fixtures/native/two_column_reading_order.raw.json"),
+		Name: "two_column_reading_order.raw.json",
+	}, nil)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(document.Kids) != 4 {
+		t.Fatalf("len(document.Kids) = %d, want 4", len(document.Kids))
+	}
+
+	got := make([]string, 0, len(document.Kids))
+	for _, element := range document.Kids {
+		para, ok := element.(*model.Paragraph)
+		if !ok {
+			t.Fatalf("element type = %T, want *model.Paragraph", element)
+		}
+		got = append(got, para.Content)
+	}
+	want := []string{
+		"Left column first line.",
+		"Left column second line.",
+		"Right column first line.",
+		"Right column second line.",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("reading order = %v, want %v", got, want)
+	}
+
+	sortedGot := append([]string(nil), got...)
+	sort.Strings(sortedGot)
+	sort.Strings(want)
+	if strings.Join(sortedGot, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("paragraph contents = %v, want %v", got, want)
 	}
 }
 

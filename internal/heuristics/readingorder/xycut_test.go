@@ -61,6 +61,22 @@ func TestSortPreservesStableOrderForTies(t *testing.T) {
 	}
 }
 
+func TestSortPrefersBalancedVerticalSplitForInterleavedColumns(t *testing.T) {
+	input := []model.ContentElement{
+		newTestElement("right-a", model.NewBox(330, 740, 520, 760)),
+		newTestElement("left-a", model.NewBox(40, 700, 230, 720)),
+		newTestElement("right-b", model.NewBox(330, 580, 520, 600)),
+		newTestElement("left-b", model.NewBox(40, 540, 230, 560)),
+	}
+
+	got := Sort(input)
+	want := []string{"left-a", "left-b", "right-a", "right-b"}
+
+	if gotLabels := labels(got); !equalStrings(gotLabels, want) {
+		t.Fatalf("Sort() = %v, want %v", gotLabels, want)
+	}
+}
+
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

@@ -138,3 +138,4 @@
 - [x] `phase-2: route Python and Node wrapper smoke through Go override`
 - [x] `phase-2: let Python/Node wrapper smoke target a Go CLI binary via env override`
 - [x] `phase-2: validate schemajson output against published schema`
+- [x] `phase-3: prefer balanced vertical splits and pin two-column reading order`
