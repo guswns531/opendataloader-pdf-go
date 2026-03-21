@@ -25,6 +25,7 @@ from evaluator import (
 )
 from evaluator_table_detection import evaluate_table_detection_batch
 from evaluator_triage import evaluate_triage_batch, print_triage_summary
+from engine_registry import ENGINES
 from pdf_parser import DEFAULT_INPUT_DIR, process_markdown
 
 
@@ -45,13 +46,20 @@ def run_benchmark(args: argparse.Namespace) -> dict:
     ground_truth_dir = _resolve_path(args.ground_truth_dir, project_root)
     prediction_root = _resolve_path(args.prediction_root, project_root)
 
-    # Determine engine based on hybrid mode
-    if args.hybrid and args.hybrid != "off":
+    # Determine engine. Explicit --engine wins; --hybrid preserves legacy behavior.
+    if args.engine:
+        engine_name = args.engine
+        os.environ.pop("HYBRID_BACKEND", None)
+    elif args.hybrid and args.hybrid != "off":
         engine_name = f"opendataloader-hybrid-{args.hybrid}"
         # Set environment variable for the hybrid parser
         os.environ["HYBRID_BACKEND"] = args.hybrid
     else:
         engine_name = "opendataloader"
+        os.environ.pop("HYBRID_BACKEND", None)
+
+    if engine_name not in ENGINES:
+        raise ValueError(f"Unknown engine: {engine_name}")
 
     # Step 1: Parse PDFs
     logging.info("Starting PDF parsing with %s...", engine_name)
@@ -272,6 +280,12 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--evaluation-filename",
         default=DEFAULT_OUTPUT_FILENAME,
         help="Filename for evaluation JSON output",
+    )
+    parser.add_argument(
+        "--engine",
+        default=None,
+        choices=list(ENGINES.keys()),
+        help="Explicit engine name from the registry. Overrides --hybrid when set.",
     )
     parser.add_argument(
         "--check-regression",

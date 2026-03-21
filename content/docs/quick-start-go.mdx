@@ -1,0 +1,66 @@
+---
+title: Quick Start with Go
+description: Build and run the current Go CLI from a local checkout of opendataloader-pdf-go.
+keywords: [PDF parsing Go, PDF CLI Go, opendataloader-pdf, PDF extraction Go]
+---
+
+Use the Go quick start when you want to build and run the current CLI directly from this repository. The Go entrypoint is CLI-only today; there is not a separate published library API in this codebase yet.
+
+## Requirements
+
+- Go 1.26 or later
+- A local checkout of this repository
+
+Check your Go toolchain first:
+
+```bash
+go version
+```
+
+## Install
+
+From the repository root, build a local binary:
+
+```bash
+go build ./cmd/opendataloader-pdf
+```
+
+If you want an installed binary on your `PATH`, `go install ./cmd/opendataloader-pdf` also works from a checkout.
+
+## Run
+
+Flags must come before positional inputs because the binary uses Go's standard `flag` parser.
+
+```bash
+./opendataloader-pdf -o output -f json,markdown samples/pdf/lorem.pdf
+```
+
+That command writes `lorem.json` and `lorem.md` to `output/`.
+
+If you do not want to install anything, run the same command through `go run`:
+
+```bash
+go run ./cmd/opendataloader-pdf -o output -f json,markdown samples/pdf/lorem.pdf
+```
+
+The CLI also accepts folders and scans them recursively for supported files:
+
+```bash
+./opendataloader-pdf -o output -f json samples/pdf/
+```
+
+## Supported Outputs
+
+The current Go CLI writes these formats:
+
+- `json`
+- `markdown`
+- `html`
+- `text`
+
+If you pass an unsupported format value, the command will fail at runtime.
+
+## Next Steps
+
+- Need the full flag list? See the [CLI Options Reference](./cli-options-reference)
+- Want to compare outputs? Use `samples/pdf/lorem.pdf` as a quick smoke test
