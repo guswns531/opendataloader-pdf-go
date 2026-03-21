@@ -149,11 +149,20 @@ func shellPagesFromPDF(data []byte) []model.PageMetadata {
 	}
 
 	pageCount := len(pageTypePattern.FindAll(data, -1))
+	sizes := extractMediaBoxSizes(data)
+	if pageCount == 0 || len(sizes) == 0 {
+		for _, decoded := range extractDecodedStreams(data) {
+			if pageCount == 0 {
+				pageCount += len(pageTypePattern.FindAll(decoded, -1))
+			}
+			if len(sizes) == 0 {
+				sizes = append(sizes, extractMediaBoxSizes(decoded)...)
+			}
+		}
+	}
 	if pageCount == 0 {
 		return nil
 	}
-
-	sizes := extractMediaBoxSizes(data)
 	pages := make([]model.PageMetadata, 0, pageCount)
 	for i := 0; i < pageCount; i++ {
 		size := model.PageSize{}
@@ -266,15 +275,23 @@ var tjPattern = regexp.MustCompile(`\((?:\\.|[^\\()])*\)\s*Tj`)
 var tjArrayPattern = regexp.MustCompile(`\[(?s:.*?)\]\s*TJ`)
 
 func extractTextShellStrings(data []byte) []string {
-	texts := extractContentStreamStrings(data)
-	if len(texts) == 0 {
-		texts = append(texts, extractLiteralStrings(data)...)
-	}
 	streamTexts := extractStringsFromStreams(data)
 	if len(streamTexts) > 0 {
-		texts = append(texts, streamTexts...)
+		return dedupeStrings(streamTexts)
 	}
-	return dedupeStrings(texts)
+
+	texts := extractContentStreamStrings(data)
+	if len(texts) > 0 {
+		return dedupeStrings(texts)
+	}
+
+	// Raw literal fallback is only safe for tiny inline pseudo-PDF test inputs.
+	// Real PDFs usually carry metadata and object-stream strings that would
+	// overwhelm the shell with garbage if we fell back indiscriminately.
+	if bytes.Contains(data, []byte("stream")) {
+		return nil
+	}
+	return dedupeStrings(extractLiteralStrings(data))
 }
 
 func extractLiteralStrings(data []byte) []string {
@@ -326,6 +343,18 @@ func extractStringsFromStreams(data []byte) []string {
 	}
 
 	out := make([]string, 0)
+	for _, decoded := range extractDecodedStreams(data) {
+		out = append(out, extractContentStreamStrings(decoded)...)
+	}
+	return out
+}
+
+func extractDecodedStreams(data []byte) [][]byte {
+	if len(data) == 0 {
+		return nil
+	}
+
+	out := make([][]byte, 0)
 	search := data
 	offset := 0
 	for {
@@ -351,7 +380,7 @@ func extractStringsFromStreams(data []byte) []string {
 				decoded = inflated
 			}
 		}
-		out = append(out, extractContentStreamStrings(decoded)...)
+		out = append(out, decoded)
 
 		offset = streamEnd + len("endstream")
 		if offset >= len(data) {
