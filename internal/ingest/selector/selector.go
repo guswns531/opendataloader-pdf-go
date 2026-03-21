@@ -8,7 +8,7 @@ import (
 	"github.com/guswns531/opendataloader-pdf-go/internal/core"
 	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/fixture"
 	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/nativepdf"
-	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/pdftext"
+	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/pdfbridge"
 )
 
 // Selector isolates runtime ingestion routing so the CLI and future wrappers
@@ -16,7 +16,8 @@ import (
 type Selector struct {
 	SemanticFixture core.Ingestor
 	NativeFixture   core.Ingestor
-	PDF             core.Ingestor
+	NativePDF       core.Ingestor
+	PDFBridge       core.Ingestor
 }
 
 // New returns a selector with the current default runtime paths.
@@ -24,7 +25,8 @@ func New() Selector {
 	return Selector{
 		SemanticFixture: fixture.New(),
 		NativeFixture:   nativepdf.NewIngestor(nativepdf.NewFixtureLoader()),
-		PDF:             TemporaryPDFIngestor(),
+		NativePDF:       nil,
+		PDFBridge:       TemporaryPDFBridge(),
 	}
 }
 
@@ -43,17 +45,20 @@ func (s Selector) Resolve(path string, useFixture bool) (core.Ingestor, error) {
 		}
 		return s.SemanticFixture, nil
 	case strings.EqualFold(filepath.Ext(path), ".pdf"):
-		if s.PDF == nil {
-			return nil, fmt.Errorf("pdf ingestor is not configured")
+		if s.NativePDF != nil {
+			return s.NativePDF, nil
 		}
-		return s.PDF, nil
+		if s.PDFBridge == nil {
+			return nil, fmt.Errorf("pdf bridge ingestor is not configured")
+		}
+		return s.PDFBridge, nil
 	default:
 		return nil, fmt.Errorf("unsupported input type for %q", path)
 	}
 }
 
-// TemporaryPDFIngestor returns the current bridge implementation for `.pdf`
+// TemporaryPDFBridge returns the current bridge implementation for real `.pdf`
 // inputs. This must be replaced by a real native parser backend.
-func TemporaryPDFIngestor() core.Ingestor {
-	return pdftext.New()
+func TemporaryPDFBridge() core.Ingestor {
+	return pdfbridge.New()
 }
