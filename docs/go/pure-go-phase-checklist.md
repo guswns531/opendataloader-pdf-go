@@ -103,3 +103,10 @@
 - [ ] Use commit subjects like `phase-0 contract freeze`, `phase-1 go model`, `phase-3 reading-order`.
 - [ ] Push after the local gate for that phase passes.
 - [ ] Record benchmark/test evidence in commit message body or adjacent `.context` note.
+
+## Current Completed Checkpoints
+
+- [x] `phase-0: add pure-go phase tracker`
+- [x] `phase-1: draft native ingestion api`
+- [x] `phase-1: add native ingestion interface scaffold`
+- [x] `phase-1: add native handle adapter and raw fixture schema`

@@ -14,6 +14,8 @@ Replace the current Java + veraPDF local extraction core with a Pure Go implemen
 
 This document defines the migration boundary, the order of work, and the parallel workstreams.
 
+Execution tracking lives in `docs/go/pure-go-phase-checklist.md`.
+
 ---
 
 ## 2. Summary
