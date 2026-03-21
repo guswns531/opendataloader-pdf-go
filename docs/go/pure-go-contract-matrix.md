@@ -14,7 +14,7 @@ This document freezes the compatibility surface for the Pure Go local-core migra
 | --- | --- | --- | --- |
 | CLI option names/defaults | `options.json`, Java `CLIOptions.java` | Partial | Most flags parse, many are placeholders only |
 | CLI exit and traversal behavior | Java CLI tests, `CLIMain.java` | Partial | Basic discovery and exit codes exist, parity is not proven |
-| Local JSON output shape | `schema.json` | Partial | Schema-shaped emitter exists, full parity not validated |
+| Local JSON output shape | `schema.json` | Partial | Schema validation tests now pass; real-world parity is still incomplete |
 | Local Markdown output | benchmark harness + Java output behavior | Partial | Deterministic Markdown exists, quality gap remains |
 | Node/Python wrapper behavior | wrapper integration tests | Partial | Go binary is benchmark-addressable, wrappers still target Java packaging |
 | Local benchmark floor | `tests/benchmark/thresholds.json` | Not met | Smoke only; replacement floor not reached |
