@@ -122,6 +122,36 @@ func TestDetectLeavesSentenceLikePrefixesAsParagraphs(t *testing.T) {
 	}
 }
 
+func TestDetectAttachesIndentedContinuationToPreviousListItem(t *testing.T) {
+	input := []model.ContentElement{
+		paragraph("1. Parent item", 24),
+		paragraph("Continuation paragraph", 42),
+		paragraph("2. Next item", 24),
+	}
+
+	got := Detect(input)
+	if gotLen := len(got); gotLen != 1 {
+		t.Fatalf("Detect() length = %d, want 1", gotLen)
+	}
+	list, ok := got[0].(*model.List)
+	if !ok {
+		t.Fatalf("first element type = %T, want *model.List", got[0])
+	}
+	if list.NumberOfItems != 2 {
+		t.Fatalf("list number of items = %d, want 2", list.NumberOfItems)
+	}
+	if len(list.ListItems[0].Kids) != 1 {
+		t.Fatalf("first list item kids = %d, want 1", len(list.ListItems[0].Kids))
+	}
+	child, ok := list.ListItems[0].Kids[0].(*model.Paragraph)
+	if !ok {
+		t.Fatalf("continuation child type = %T, want *model.Paragraph", list.ListItems[0].Kids[0])
+	}
+	if child.Content != "Continuation paragraph" {
+		t.Fatalf("continuation child content = %q, want %q", child.Content, "Continuation paragraph")
+	}
+}
+
 func paragraph(text string, left float64) *model.Paragraph {
 	return &model.Paragraph{
 		TextNode: model.TextNode{

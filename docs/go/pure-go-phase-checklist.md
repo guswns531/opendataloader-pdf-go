@@ -141,3 +141,4 @@
 - [x] `phase-2: validate schemajson output against published schema`
 - [x] `phase-3: prefer balanced vertical splits and pin two-column reading order`
 - [x] `phase-3: add style-rarity heading cues and keep full heuristic regression green`
+- [x] `phase-4: pin list continuation attachment to the previous list item`
