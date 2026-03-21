@@ -3,6 +3,11 @@
 This document freezes the compatibility surface for the Pure Go local-core migration
  and records the current status of the Go skeleton against that contract.
 
+## Phase Status
+
+- Phase 1 foundation: complete
+- Current active focus: Phase 2 CLI/emitter parity on fixtures
+
 ## MVP Contract Sources
 
 | Surface | Source of truth | Current Go status | Notes |

@@ -37,10 +37,10 @@
 
 ### Phase 1: Go Core Foundation
 
-- [ ] Finalize the Go-native document model for pages, raw artifacts, semantic nodes, tables, lists, headings, captions, links, IDs, and levels.
-- [ ] Replace any remaining static/global-state assumptions with per-document processing context.
-- [ ] Define interfaces between ingestion, heuristics, and emitters.
-- [ ] Keep fixture ingestion as the stable test seam for downstream work.
+- [x] Finalize the Go-native document model for pages, raw artifacts, semantic nodes, tables, lists, headings, captions, links, IDs, and levels.
+- [x] Replace any remaining static/global-state assumptions with per-document processing context.
+- [x] Define interfaces between ingestion, heuristics, and emitters.
+- [x] Keep fixture ingestion as the stable test seam for downstream work.
 
 ### Phase 2: CLI and Emitter Parity on Fixtures
 
@@ -97,6 +97,12 @@
 | Phase 5 | Local extraction runs on PDFs without Java and without `ledongthuc/pdf` |
 | Phase 6 | Benchmark thresholds are met for local mode |
 | Phase 7 | Deferred features have explicit acceptance tests or remain deferred |
+
+## Phase Status
+
+- [x] Phase 0 complete
+- [x] Phase 1 complete
+- [ ] Phase 2 active
 
 ## Commit Policy
 
