@@ -124,3 +124,4 @@
 - [x] `phase-1: scan flate streams for first-pass Tj/TJ text shells`
 - [x] `phase-1: add opt-in native-skeleton pdf runtime path`
 - [x] `phase-1: disable unsafe raw literal fallback on stream-backed real PDFs`
+- [x] `phase-1: decode ToUnicode-mapped hex TJ runs and emit first real lorem paragraph`

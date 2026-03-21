@@ -273,14 +273,20 @@ func shellArtifactsFromPDF(data []byte, pages []model.PageMetadata) [][]*model.R
 var literalStringPattern = regexp.MustCompile(`\((?:\\.|[^\\()])*\)`)
 var tjPattern = regexp.MustCompile(`\((?:\\.|[^\\()])*\)\s*Tj`)
 var tjArrayPattern = regexp.MustCompile(`\[(?s:.*?)\]\s*TJ`)
+var hexTjPattern = regexp.MustCompile(`<([0-9A-Fa-f]+)>\s*Tj`)
+var hexStringPattern = regexp.MustCompile(`<([0-9A-Fa-f]+)>`)
+var arrayTextTokenPattern = regexp.MustCompile(`\((?:\\.|[^\\()])*\)|<([0-9A-Fa-f]+)>`)
+var bfcharBlockPattern = regexp.MustCompile(`(?s)\d+\s+beginbfchar(.*?)endbfchar`)
+var bfcharMappingPattern = regexp.MustCompile(`<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>`)
 
 func extractTextShellStrings(data []byte) []string {
-	streamTexts := extractStringsFromStreams(data)
+	glyphMap := extractToUnicodeMap(data)
+	streamTexts := extractStringsFromStreams(data, glyphMap)
 	if len(streamTexts) > 0 {
 		return dedupeStrings(streamTexts)
 	}
 
-	texts := extractContentStreamStrings(data)
+	texts := extractContentStreamStrings(data, glyphMap)
 	if len(texts) > 0 {
 		return dedupeStrings(texts)
 	}
@@ -318,7 +324,7 @@ func extractLiteralStrings(data []byte) []string {
 	return out
 }
 
-func extractContentStreamStrings(data []byte) []string {
+func extractContentStreamStrings(data []byte, glyphMap map[string]string) []string {
 	if len(data) == 0 {
 		return nil
 	}
@@ -330,21 +336,58 @@ func extractContentStreamStrings(data []byte) []string {
 		}
 	}
 	for _, match := range tjArrayPattern.FindAll(data, -1) {
-		for _, text := range extractLiteralStrings(match) {
+		if text := extractTJArrayString(match, glyphMap); text != "" {
 			out = append(out, text)
+		}
+	}
+	for _, match := range hexTjPattern.FindAllSubmatch(data, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		if decoded := decodeHexGlyphString(match[1], glyphMap); decoded != "" {
+			out = append(out, decoded)
 		}
 	}
 	return out
 }
 
-func extractStringsFromStreams(data []byte) []string {
+func extractTJArrayString(data []byte, glyphMap map[string]string) string {
+	tokens := arrayTextTokenPattern.FindAll(data, -1)
+	if len(tokens) == 0 {
+		return ""
+	}
+	var builder strings.Builder
+	for _, token := range tokens {
+		if len(token) == 0 {
+			continue
+		}
+		switch token[0] {
+		case '(':
+			literals := extractLiteralStrings(token)
+			for _, text := range literals {
+				builder.WriteString(text)
+			}
+		case '<':
+			hexMatches := hexStringPattern.FindAllSubmatch(token, -1)
+			for _, hexMatch := range hexMatches {
+				if len(hexMatch) < 2 {
+					continue
+				}
+				builder.WriteString(decodeHexGlyphString(hexMatch[1], glyphMap))
+			}
+		}
+	}
+	return strings.TrimSpace(builder.String())
+}
+
+func extractStringsFromStreams(data []byte, glyphMap map[string]string) []string {
 	if len(data) == 0 {
 		return nil
 	}
 
 	out := make([]string, 0)
 	for _, decoded := range extractDecodedStreams(data) {
-		out = append(out, extractContentStreamStrings(decoded)...)
+		out = append(out, extractContentStreamStrings(decoded, glyphMap)...)
 	}
 	return out
 }
@@ -455,6 +498,75 @@ func dedupeStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func extractToUnicodeMap(data []byte) map[string]string {
+	decodedStreams := extractDecodedStreams(data)
+	if len(decodedStreams) == 0 {
+		return nil
+	}
+
+	out := make(map[string]string)
+	for _, decoded := range decodedStreams {
+		for _, block := range bfcharBlockPattern.FindAllSubmatch(decoded, -1) {
+			if len(block) < 2 {
+				continue
+			}
+			for _, mapping := range bfcharMappingPattern.FindAllSubmatch(block[1], -1) {
+				if len(mapping) < 3 {
+					continue
+				}
+				src := strings.ToUpper(string(mapping[1]))
+				dst := decodeUnicodeHex(mapping[2])
+				if src == "" || dst == "" {
+					continue
+				}
+				out[src] = dst
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func decodeHexGlyphString(hexBytes []byte, glyphMap map[string]string) string {
+	hex := strings.ToUpper(strings.TrimSpace(string(hexBytes)))
+	if hex == "" {
+		return ""
+	}
+	if glyphMap != nil {
+		var builder strings.Builder
+		for i := 0; i+4 <= len(hex); i += 4 {
+			if mapped, ok := glyphMap[hex[i:i+4]]; ok {
+				builder.WriteString(mapped)
+			}
+		}
+		if builder.Len() > 0 {
+			return builder.String()
+		}
+	}
+	return decodeUnicodeHex(hexBytes)
+}
+
+func decodeUnicodeHex(hexBytes []byte) string {
+	hex := strings.TrimSpace(string(hexBytes))
+	if hex == "" || len(hex)%4 != 0 {
+		return ""
+	}
+	runes := make([]rune, 0, len(hex)/4)
+	for i := 0; i+4 <= len(hex); i += 4 {
+		value, err := strconv.ParseUint(hex[i:i+4], 16, 16)
+		if err != nil {
+			return ""
+		}
+		if value == 0xFFFF || value == 0x0000 {
+			continue
+		}
+		runes = append(runes, rune(value))
+	}
+	return string(runes)
 }
 
 func distributeTextAcrossPages(texts []string, pageCount int) [][]string {
