@@ -149,6 +149,13 @@ func writeArtifact(b *strings.Builder, artifact *model.RawArtifact, depth int) {
 	if len(artifact.Data) > 0 {
 		writeLine(b, depth+1, "Data bytes: %d", len(artifact.Data))
 	}
+	writeField(b, depth+1, "ColorSpace", artifact.ColorSpace)
+	if artifact.BitsPerComponent > 0 {
+		writeLine(b, depth+1, "BitsPerComponent: %d", artifact.BitsPerComponent)
+	}
+	if len(artifact.Filters) > 0 {
+		writeField(b, depth+1, "Filters", strings.Join(artifact.Filters, ","))
+	}
 	writeTextProperties(b, depth+1, artifact.Style)
 	writeLinkField(b, depth+1, artifact.Links)
 	writeIntLine(b, depth+1, "Sequence", artifact.Sequence)

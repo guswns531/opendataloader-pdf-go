@@ -123,12 +123,17 @@ func buildPage(document *model.Document, pageIndex int, pageHandle PageHandle) (
 	if err != nil {
 		return nil, fmt.Errorf("load artifacts for page %d: %w", pageIndex, err)
 	}
+	tableCandidates, err := pageHandle.TableCandidates(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("load table candidates for page %d: %w", pageIndex, err)
+	}
 
 	page := &model.Page{
 		Metadata:  metadata,
-		Artifacts: make([]*model.RawArtifact, 0, len(artifacts)),
+		Artifacts: make([]*model.RawArtifact, 0, len(artifacts)+countTableCandidateArtifacts(tableCandidates)),
 		Kids:      make([]model.ContentElement, 0),
 	}
+	maxSequence := -1
 	for _, artifact := range artifacts {
 		if artifact == nil {
 			continue
@@ -140,18 +145,76 @@ func buildPage(document *model.Document, pageIndex int, pageHandle PageHandle) (
 		cloned.PageIndex = metadata.Index
 		cloned.PageNumber = metadata.Number
 		page.Artifacts = append(page.Artifacts, cloned)
+		if cloned.Sequence > maxSequence {
+			maxSequence = cloned.Sequence
+		}
+	}
+	for _, artifact := range tableCandidateArtifacts(tableCandidates, metadata, maxSequence+1) {
+		if artifact == nil {
+			continue
+		}
+		if artifact.ID == 0 && document != nil {
+			artifact.ID = document.NewArtifactID()
+		}
+		page.Artifacts = append(page.Artifacts, artifact)
 	}
 
 	return page, nil
 }
 
+func countTableCandidateArtifacts(set *TableCandidateSet) int {
+	if set == nil {
+		return 0
+	}
+	return len(set.HorizontalLines) + len(set.VerticalLines) + len(set.Rectangles)
+}
+
+func tableCandidateArtifacts(set *TableCandidateSet, page model.PageMetadata, sequenceStart int) []*model.RawArtifact {
+	if set == nil {
+		return nil
+	}
+
+	artifacts := make([]*model.RawArtifact, 0, countTableCandidateArtifacts(set))
+	sequence := sequenceStart
+	for _, segment := range set.HorizontalLines {
+		artifact := lineArtifactFromSegment(segment, page, sequence, nil)
+		artifact.Style.Content = ""
+		artifacts = append(artifacts, artifact)
+		sequence++
+	}
+	for _, segment := range set.VerticalLines {
+		artifact := lineArtifactFromSegment(segment, page, sequence, nil)
+		artifact.Style.Content = ""
+		artifacts = append(artifacts, artifact)
+		sequence++
+	}
+	for _, box := range set.Rectangles {
+		normalized := box.Normalize()
+		if normalized.IsZero() {
+			continue
+		}
+		artifact := pathArtifactFromBox(normalized, page, sequence, nil)
+		artifact.Style.Content = ""
+		artifacts = append(artifacts, artifact)
+		sequence++
+	}
+	return artifacts
+}
+
 func cloneArtifact(artifact *model.RawArtifact) *model.RawArtifact {
 	cloned := *artifact
+	if artifact.MarkedContentID != nil {
+		mcid := *artifact.MarkedContentID
+		cloned.MarkedContentID = &mcid
+	}
 	if len(artifact.Boxes) > 0 {
 		cloned.Boxes = append(model.MultiBox(nil), artifact.Boxes...)
 	}
 	if len(artifact.Data) > 0 {
 		cloned.Data = append([]byte(nil), artifact.Data...)
+	}
+	if len(artifact.Filters) > 0 {
+		cloned.Filters = append([]string(nil), artifact.Filters...)
 	}
 	return &cloned
 }

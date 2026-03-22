@@ -89,18 +89,21 @@ type pageSizeOutput struct {
 }
 
 type rawArtifactOutput struct {
-	ID         model.ArtifactID      `json:"id"`
-	Kind       model.ArtifactKind    `json:"kind"`
-	PageIndex  model.PageIndex       `json:"page_index"`
-	PageNumber model.PageNumber      `json:"page_number"`
-	Bounds     *boxValue             `json:"bounds,omitempty"`
-	Boxes      []boxValue            `json:"boxes,omitempty"`
-	Text       string                `json:"text,omitempty"`
-	Format     model.ImageFormat     `json:"format,omitempty"`
-	Data       []byte                `json:"data,omitempty"`
-	Style      *textPropertiesOutput `json:"style,omitempty"`
-	Sequence   int                   `json:"sequence"`
-	Links      *linkOutput           `json:"links,omitempty"`
+	ID               model.ArtifactID      `json:"id"`
+	Kind             model.ArtifactKind    `json:"kind"`
+	PageIndex        model.PageIndex       `json:"page_index"`
+	PageNumber       model.PageNumber      `json:"page_number"`
+	Bounds           *boxValue             `json:"bounds,omitempty"`
+	Boxes            []boxValue            `json:"boxes,omitempty"`
+	Text             string                `json:"text,omitempty"`
+	Format           model.ImageFormat     `json:"format,omitempty"`
+	Data             []byte                `json:"data,omitempty"`
+	ColorSpace       string                `json:"color_space,omitempty"`
+	BitsPerComponent int                   `json:"bits_per_component,omitempty"`
+	Filters          []string              `json:"filters,omitempty"`
+	Style            *textPropertiesOutput `json:"style,omitempty"`
+	Sequence         int                   `json:"sequence"`
+	Links            *linkOutput           `json:"links,omitempty"`
 }
 
 type contentOutput struct {
@@ -272,17 +275,20 @@ func convertPageMetadata(metadata model.PageMetadata) pageMetadataOutput {
 
 func convertRawArtifact(artifact *model.RawArtifact) rawArtifactOutput {
 	output := rawArtifactOutput{
-		ID:         artifact.ID,
-		Kind:       artifact.Kind,
-		PageIndex:  artifact.PageIndex,
-		PageNumber: artifact.PageNumber,
-		Bounds:     boxPtr(artifact.Bounds),
-		Text:       artifact.Text,
-		Format:     artifact.Format,
-		Data:       append([]byte(nil), artifact.Data...),
-		Style:      textPropertiesPtr(artifact.Style),
-		Sequence:   artifact.Sequence,
-		Links:      linkPtr(artifact.Links),
+		ID:               artifact.ID,
+		Kind:             artifact.Kind,
+		PageIndex:        artifact.PageIndex,
+		PageNumber:       artifact.PageNumber,
+		Bounds:           boxPtr(artifact.Bounds),
+		Text:             artifact.Text,
+		Format:           artifact.Format,
+		Data:             append([]byte(nil), artifact.Data...),
+		ColorSpace:       artifact.ColorSpace,
+		BitsPerComponent: artifact.BitsPerComponent,
+		Filters:          append([]string(nil), artifact.Filters...),
+		Style:            textPropertiesPtr(artifact.Style),
+		Sequence:         artifact.Sequence,
+		Links:            linkPtr(artifact.Links),
 	}
 	if len(artifact.Boxes) > 0 {
 		output.Boxes = make([]boxValue, 0, len(artifact.Boxes))

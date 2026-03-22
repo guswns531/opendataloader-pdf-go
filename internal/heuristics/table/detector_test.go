@@ -1,6 +1,7 @@
 package table
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/guswns531/opendataloader-pdf-go/internal/model"
@@ -136,6 +137,154 @@ func TestDetectLeavesSingleRowAsParagraphs(t *testing.T) {
 		if _, ok := element.(*model.Paragraph); !ok {
 			t.Fatalf("element %d type = %T, want *model.Paragraph", i, element)
 		}
+	}
+}
+
+func TestDetectWithArtifactsLimitsTableSpanToGraphicZone(t *testing.T) {
+	input := []model.ContentElement{
+		paragraph("North", 40, model.NewBox(40, 700, 120, 716)),
+		paragraph("18", 180, model.NewBox(180, 700, 220, 716)),
+		paragraph("South", 40, model.NewBox(40, 670, 120, 686)),
+		paragraph("24", 180, model.NewBox(180, 670, 220, 686)),
+		paragraph("This sentence is deliberately long enough to look like prose.", 40, model.NewBox(40, 630, 160, 646)),
+		paragraph("This matching sentence should keep the text-only span from becoming a table.", 180, model.NewBox(180, 630, 360, 646)),
+		paragraph("A second prose row keeps the aligned run longer than the actual table.", 40, model.NewBox(40, 600, 200, 616)),
+		paragraph("The graphic hints should still isolate the real two-by-two grid.", 180, model.NewBox(180, 600, 360, 616)),
+	}
+	artifacts := []*model.RawArtifact{
+		{
+			Kind:       model.ArtifactKindLine,
+			PageIndex:  0,
+			PageNumber: 1,
+			Bounds:     model.NewBox(35, 695, 225, 697),
+		},
+		{
+			Kind:       model.ArtifactKindLine,
+			PageIndex:  0,
+			PageNumber: 1,
+			Bounds:     model.NewBox(129, 665, 131, 717),
+		},
+	}
+
+	textOnly := Detect(input)
+	tableOnly, ok := textOnly[0].(*model.Table)
+	if !ok {
+		t.Fatalf("Detect() first element type = %T, want *model.Table", textOnly[0])
+	}
+	if tableOnly.NumberOfRows != 3 {
+		t.Fatalf("Detect() table row count = %d, want 3 without artifact hints", tableOnly.NumberOfRows)
+	}
+
+	got := DetectWithArtifacts(input, artifacts)
+	if gotLen, want := len(got), 5; gotLen != want {
+		t.Fatalf("DetectWithArtifacts() len = %d, want %d", gotLen, want)
+	}
+
+	tableNode, ok := got[0].(*model.Table)
+	if !ok {
+		t.Fatalf("first element type = %T, want *model.Table", got[0])
+	}
+	if tableNode.NumberOfRows != 2 || tableNode.NumberOfColumns != 2 {
+		t.Fatalf("table dimensions = %dx%d, want 2x2", tableNode.NumberOfRows, tableNode.NumberOfColumns)
+	}
+	for i := 1; i < len(got); i++ {
+		if _, ok := got[i].(*model.Paragraph); !ok {
+			t.Fatalf("element %d type = %T, want *model.Paragraph", i, got[i])
+		}
+	}
+}
+
+func TestDetectWithArtifactsExpandsSparseHintedRowsIntoLocalAlignedTable(t *testing.T) {
+	input := []model.ContentElement{
+		paragraph("North", 40, model.NewBox(40, 700, 120, 716)),
+		paragraph("18", 180, model.NewBox(180, 700, 220, 716)),
+		paragraph("South", 40, model.NewBox(40, 670, 120, 686)),
+		paragraph("24", 180, model.NewBox(180, 670, 220, 686)),
+		paragraph("This sentence is deliberately long enough to look like prose.", 40, model.NewBox(40, 630, 160, 646)),
+		paragraph("This matching sentence should keep the text-only span from becoming a table.", 180, model.NewBox(180, 630, 360, 646)),
+	}
+	artifacts := []*model.RawArtifact{
+		{
+			Kind:       model.ArtifactKindLine,
+			PageIndex:  0,
+			PageNumber: 1,
+			Bounds:     model.NewBox(35, 695, 225, 697),
+		},
+		{
+			Kind:       model.ArtifactKindLine,
+			PageIndex:  0,
+			PageNumber: 1,
+			Bounds:     model.NewBox(129, 694, 131, 717),
+		},
+	}
+
+	textOnly := Detect(input)
+	tableOnly, ok := textOnly[0].(*model.Table)
+	if !ok {
+		t.Fatalf("Detect() first element type = %T, want *model.Table", textOnly[0])
+	}
+	if tableOnly.NumberOfRows != 3 {
+		t.Fatalf("Detect() table row count = %d, want 3 without sparse artifact hints", tableOnly.NumberOfRows)
+	}
+
+	got := DetectWithArtifacts(input, artifacts)
+	if gotLen, want := len(got), 3; gotLen != want {
+		t.Fatalf("DetectWithArtifacts() len = %d, want %d", gotLen, want)
+	}
+
+	tableNode, ok := got[0].(*model.Table)
+	if !ok {
+		t.Fatalf("first element type = %T, want *model.Table", got[0])
+	}
+	if tableNode.NumberOfRows != 2 || tableNode.NumberOfColumns != 2 {
+		t.Fatalf("table dimensions = %dx%d, want 2x2", tableNode.NumberOfRows, tableNode.NumberOfColumns)
+	}
+	if got := paragraphContent(tableNode.Rows[1].Cells[0].Kids[0]); got != "South" {
+		t.Fatalf("table second row first cell = %q, want South", got)
+	}
+	for i := 1; i < len(got); i++ {
+		if _, ok := got[i].(*model.Paragraph); !ok {
+			t.Fatalf("element %d type = %T, want *model.Paragraph", i, got[i])
+		}
+	}
+}
+
+func TestDetectWithArtifactsUsesRectangleHintZone(t *testing.T) {
+	input := []model.ContentElement{
+		paragraph("North", 40, model.NewBox(40, 700, 120, 716)),
+		paragraph("18", 180, model.NewBox(180, 700, 220, 716)),
+		paragraph("South", 40, model.NewBox(40, 670, 120, 686)),
+		paragraph("24", 180, model.NewBox(180, 670, 220, 686)),
+		paragraph("This sentence is deliberately long enough to look like prose.", 40, model.NewBox(40, 630, 160, 646)),
+		paragraph("This matching sentence should keep the text-only span from becoming a table.", 180, model.NewBox(180, 630, 360, 646)),
+	}
+	artifacts := []*model.RawArtifact{
+		{
+			Kind:       model.ArtifactKindPath,
+			PageIndex:  0,
+			PageNumber: 1,
+			Bounds:     model.NewBox(35, 665, 225, 717),
+			Boxes:      model.MultiBox{model.NewBox(35, 665, 225, 717)},
+		},
+	}
+
+	got := DetectWithArtifacts(input, artifacts)
+	if gotLen, want := len(got), 3; gotLen != want {
+		t.Fatalf("DetectWithArtifacts() len = %d, want %d", gotLen, want)
+	}
+
+	tableNode, ok := got[0].(*model.Table)
+	if !ok {
+		t.Fatalf("first element type = %T, want *model.Table", got[0])
+	}
+	if tableNode.NumberOfRows != 2 || tableNode.NumberOfColumns != 2 {
+		t.Fatalf("table dimensions = %dx%d, want 2x2", tableNode.NumberOfRows, tableNode.NumberOfColumns)
+	}
+	if got := paragraphContent(tableNode.Rows[0].Cells[1].Kids[0]); got != "18" {
+		t.Fatalf("table first row second cell = %q, want 18", got)
+	}
+	if got := paragraphContent(got[1]); !strings.Contains(got, "This sentence") {
+		t.Fatalf("remaining paragraph = %q, want preserved prose", got)
 	}
 }
 

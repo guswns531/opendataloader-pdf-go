@@ -240,8 +240,9 @@ func (s *stubDocumentHandle) Close() error {
 }
 
 type stubPageHandle struct {
-	metadata  model.PageMetadata
-	artifacts []*model.RawArtifact
+	metadata        model.PageMetadata
+	artifacts       []*model.RawArtifact
+	tableCandidates *TableCandidateSet
 }
 
 func (s *stubPageHandle) Metadata() model.PageMetadata {
@@ -253,9 +254,81 @@ func (s *stubPageHandle) Artifacts(_ context.Context, _ ArtifactOptions) ([]*mod
 }
 
 func (s *stubPageHandle) TableCandidates(_ context.Context) (*TableCandidateSet, error) {
-	return nil, nil
+	return cloneTableCandidateSet(s.tableCandidates), nil
 }
 
 func (s *stubPageHandle) StructTree(_ context.Context) (*StructNode, error) {
 	return nil, nil
+}
+
+func TestBuildDocumentFromHandleAppendsTableCandidateHintArtifacts(t *testing.T) {
+	handle := &stubDocumentHandle{
+		metadata: model.DocumentMetadata{},
+		pages: []PageHandle{
+			&stubPageHandle{
+				metadata: model.PageMetadata{},
+				artifacts: []*model.RawArtifact{
+					{
+						Kind:     model.ArtifactKindText,
+						Text:     "header",
+						Sequence: 4,
+						Bounds:   model.NewBox(10, 100, 60, 112),
+					},
+				},
+				tableCandidates: &TableCandidateSet{
+					HorizontalLines: []LineSegment{
+						{
+							Start: model.Point{X: 40, Y: 80},
+							End:   model.Point{X: 220, Y: 80},
+							Width: 1,
+						},
+					},
+					VerticalLines: []LineSegment{
+						{
+							Start: model.Point{X: 130, Y: 40},
+							End:   model.Point{X: 130, Y: 90},
+							Width: 1,
+						},
+					},
+					Rectangles: []model.Box{
+						model.NewBox(35, 35, 225, 95),
+					},
+				},
+			},
+		},
+	}
+
+	document, err := BuildDocumentFromHandle(handle, core.Source{Name: "sample.pdf"})
+	if err != nil {
+		t.Fatalf("BuildDocumentFromHandle() error = %v", err)
+	}
+
+	page := document.Pages[0]
+	if got, want := len(page.Artifacts), 4; got != want {
+		t.Fatalf("len(page.Artifacts) = %d, want %d", got, want)
+	}
+
+	if page.Artifacts[1].Kind != model.ArtifactKindLine {
+		t.Fatalf("page.Artifacts[1].Kind = %q, want %q", page.Artifacts[1].Kind, model.ArtifactKindLine)
+	}
+	if page.Artifacts[2].Kind != model.ArtifactKindLine {
+		t.Fatalf("page.Artifacts[2].Kind = %q, want %q", page.Artifacts[2].Kind, model.ArtifactKindLine)
+	}
+	if page.Artifacts[3].Kind != model.ArtifactKindPath {
+		t.Fatalf("page.Artifacts[3].Kind = %q, want %q", page.Artifacts[3].Kind, model.ArtifactKindPath)
+	}
+	if got, want := page.Artifacts[1].Sequence, 5; got != want {
+		t.Fatalf("page.Artifacts[1].Sequence = %d, want %d", got, want)
+	}
+	if got, want := page.Artifacts[3].Bounds, model.NewBox(35, 35, 225, 95); got != want {
+		t.Fatalf("page.Artifacts[3].Bounds = %#v, want %#v", got, want)
+	}
+	for i, artifact := range page.Artifacts[1:] {
+		if artifact.ID == 0 {
+			t.Fatalf("page.Artifacts[%d].ID = 0, want non-zero", i+1)
+		}
+		if artifact.PageIndex != 0 || artifact.PageNumber != 1 {
+			t.Fatalf("page.Artifacts[%d] page = (%d, %d), want (0, 1)", i+1, artifact.PageIndex, artifact.PageNumber)
+		}
+	}
 }

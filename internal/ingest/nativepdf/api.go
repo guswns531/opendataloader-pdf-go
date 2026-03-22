@@ -62,9 +62,10 @@ type LineSegment struct {
 
 // StructNode is the minimal tagged-PDF hook shape for future struct-tree support.
 type StructNode struct {
-	Type        string
-	PageIndex   *model.PageIndex
-	Bounds      model.Box
-	Kids        []*StructNode
-	ArtifactIDs []model.ArtifactID
+	Type             string
+	PageIndex        *model.PageIndex
+	Bounds           model.Box
+	Kids             []*StructNode
+	ArtifactIDs      []model.ArtifactID
+	MarkedContentIDs []int
 }

@@ -22,16 +22,20 @@ const (
 
 // RawArtifact represents a low-level extracted page artifact.
 type RawArtifact struct {
-	ID         ArtifactID
-	Kind       ArtifactKind
-	PageIndex  PageIndex
-	PageNumber PageNumber
-	Bounds     Box
-	Boxes      MultiBox
-	Text       string
-	Format     ImageFormat
-	Data       []byte
-	Style      TextProperties
-	Sequence   int
-	Links      LinkField
+	ID               ArtifactID
+	Kind             ArtifactKind
+	PageIndex        PageIndex
+	PageNumber       PageNumber
+	MarkedContentID  *int
+	Bounds           Box
+	Boxes            MultiBox
+	Text             string
+	Format           ImageFormat
+	Data             []byte
+	ColorSpace       string
+	BitsPerComponent int
+	Filters          []string
+	Style            TextProperties
+	Sequence         int
+	Links            LinkField
 }

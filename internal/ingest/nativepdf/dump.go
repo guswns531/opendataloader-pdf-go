@@ -49,14 +49,17 @@ func writeRawDumpIfRequested(document *model.Document) error {
 				continue
 			}
 			item.Artifacts = append(item.Artifacts, dumpArtifact{
-				Kind:       artifact.Kind,
-				PageIndex:  artifact.PageIndex,
-				PageNumber: artifact.PageNumber,
-				Sequence:   artifact.Sequence,
-				Bounds:     artifact.Bounds,
-				Boxes:      append(model.MultiBox(nil), artifact.Boxes...),
-				Text:       artifact.Text,
-				Format:     artifact.Format,
+				Kind:             artifact.Kind,
+				PageIndex:        artifact.PageIndex,
+				PageNumber:       artifact.PageNumber,
+				Sequence:         artifact.Sequence,
+				Bounds:           artifact.Bounds,
+				Boxes:            append(model.MultiBox(nil), artifact.Boxes...),
+				Text:             artifact.Text,
+				Format:           artifact.Format,
+				ColorSpace:       artifact.ColorSpace,
+				BitsPerComponent: artifact.BitsPerComponent,
+				Filters:          append([]string(nil), artifact.Filters...),
 				Style: dumpTextStyle{
 					Font:       artifact.Style.Font,
 					FontSize:   artifact.Style.FontSize,
@@ -104,15 +107,18 @@ type dumpPageMetadata struct {
 }
 
 type dumpArtifact struct {
-	Kind       model.ArtifactKind `json:"kind"`
-	PageIndex  model.PageIndex    `json:"page_index"`
-	PageNumber model.PageNumber   `json:"page_number"`
-	Sequence   int                `json:"sequence"`
-	Bounds     model.Box          `json:"bounds,omitempty"`
-	Boxes      model.MultiBox     `json:"boxes,omitempty"`
-	Text       string             `json:"text,omitempty"`
-	Format     model.ImageFormat  `json:"format,omitempty"`
-	Style      dumpTextStyle      `json:"style,omitempty"`
+	Kind             model.ArtifactKind `json:"kind"`
+	PageIndex        model.PageIndex    `json:"page_index"`
+	PageNumber       model.PageNumber   `json:"page_number"`
+	Sequence         int                `json:"sequence"`
+	Bounds           model.Box          `json:"bounds,omitempty"`
+	Boxes            model.MultiBox     `json:"boxes,omitempty"`
+	Text             string             `json:"text,omitempty"`
+	Format           model.ImageFormat  `json:"format,omitempty"`
+	ColorSpace       string             `json:"color_space,omitempty"`
+	BitsPerComponent int                `json:"bits_per_component,omitempty"`
+	Filters          []string           `json:"filters,omitempty"`
+	Style            dumpTextStyle      `json:"style,omitempty"`
 }
 
 type dumpTextStyle struct {

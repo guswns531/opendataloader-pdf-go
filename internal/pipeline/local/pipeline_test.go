@@ -267,3 +267,295 @@ func TestPipelineKeepsNativeTwoColumnLinesAsSeparateParagraphs(t *testing.T) {
 		t.Fatalf("paragraph contents = %v, want %v", got, want)
 	}
 }
+
+func TestPipelineUsesNativeGraphicArtifactsToIsolateTableCandidates(t *testing.T) {
+	const fixtureJSON = `{
+	  "metadata": {"file_name": "fixture.json", "page_count": 1},
+	  "pages": [
+	    {
+	      "metadata": {"number": 1, "index": 0},
+	      "artifacts": [
+	        {
+	          "kind": "text",
+	          "sequence": 0,
+	          "bounds": {"left": 40, "bottom": 730, "right": 120, "top": 746},
+	          "text": "North"
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 1,
+	          "bounds": {"left": 180, "bottom": 730, "right": 220, "top": 746},
+	          "text": "18"
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 2,
+	          "bounds": {"left": 40, "bottom": 680, "right": 120, "top": 696},
+	          "text": "South"
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 3,
+	          "bounds": {"left": 180, "bottom": 680, "right": 220, "top": 696},
+	          "text": "24"
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 4,
+	          "bounds": {"left": 40, "bottom": 630, "right": 160, "top": 646},
+	          "text": "This sentence is deliberately long enough to look like prose."
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 5,
+	          "bounds": {"left": 180, "bottom": 630, "right": 360, "top": 646},
+	          "text": "This matching sentence should keep the text-only span from becoming a table."
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 6,
+	          "bounds": {"left": 40, "bottom": 600, "right": 200, "top": 616},
+	          "text": "A second prose row keeps the aligned run longer than the actual table."
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 7,
+	          "bounds": {"left": 180, "bottom": 600, "right": 360, "top": 616},
+	          "text": "The graphic hints should still isolate the real two-by-two grid."
+	        },
+	        {
+	          "kind": "line",
+	          "sequence": 8,
+	          "bounds": {"left": 35, "bottom": 725, "right": 225, "top": 727}
+	        },
+	        {
+	          "kind": "line",
+	          "sequence": 9,
+	          "bounds": {"left": 129, "bottom": 675, "right": 131, "top": 747}
+	        }
+	      ]
+	    }
+	  ]
+	}`
+
+	pipeline := New(nativepdf.NewIngestor(nativepdf.NewFixtureLoader()))
+	ctx := core.NewProcessingContext(nil, core.ProcessingOptions{})
+
+	document, err := pipeline.Run(ctx, core.Source{
+		Name:   "fixture.json",
+		Reader: strings.NewReader(fixtureJSON),
+	}, nil)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got, want := len(document.Kids), 2; got != want {
+		t.Fatalf("len(document.Kids) = %d, want %d", got, want)
+	}
+
+	tableIndex := -1
+	for i, element := range document.Kids {
+		if _, ok := element.(*model.Table); ok {
+			tableIndex = i
+			break
+		}
+	}
+	if tableIndex < 0 {
+		t.Fatalf("document.Kids did not contain a table: %T, %T", document.Kids[0], document.Kids[1])
+	}
+	tableNode := document.Kids[tableIndex].(*model.Table)
+	if tableNode.NumberOfRows != 2 || tableNode.NumberOfColumns != 2 {
+		t.Fatalf("table dimensions = %dx%d, want 2x2", tableNode.NumberOfRows, tableNode.NumberOfColumns)
+	}
+	if got := paragraphContent(tableNode.Rows[0].Cells[0].Kids[0]); got != "North" {
+		t.Fatalf("table first cell = %q, want North", got)
+	}
+	proseSeen := 0
+	for i, element := range document.Kids {
+		if i == tableIndex {
+			continue
+		}
+		if got := paragraphContent(element); strings.Contains(got, "This sentence") && strings.Contains(got, "graphic hints") {
+			proseSeen++
+		}
+	}
+	if proseSeen != 1 {
+		t.Fatalf("prose paragraphs preserved = %d, want 1", proseSeen)
+	}
+}
+
+func TestPipelineUsesSparseNativeGraphicArtifactsToAnchorLocalTable(t *testing.T) {
+	const fixtureJSON = `{
+	  "metadata": {"file_name": "fixture.json", "page_count": 1},
+	  "pages": [
+	    {
+	      "metadata": {"number": 1, "index": 0},
+	      "artifacts": [
+	        {
+	          "kind": "text",
+	          "sequence": 0,
+	          "bounds": {"left": 40, "bottom": 730, "right": 120, "top": 746},
+	          "text": "North"
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 1,
+	          "bounds": {"left": 180, "bottom": 730, "right": 220, "top": 746},
+	          "text": "18"
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 2,
+	          "bounds": {"left": 40, "bottom": 680, "right": 120, "top": 696},
+	          "text": "South"
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 3,
+	          "bounds": {"left": 180, "bottom": 680, "right": 220, "top": 696},
+	          "text": "24"
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 4,
+	          "bounds": {"left": 40, "bottom": 630, "right": 160, "top": 646},
+	          "text": "This sentence is deliberately long enough to look like prose."
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 5,
+	          "bounds": {"left": 180, "bottom": 630, "right": 360, "top": 646},
+	          "text": "This matching sentence should keep the text-only span from becoming a table."
+	        },
+	        {
+	          "kind": "line",
+	          "sequence": 6,
+	          "bounds": {"left": 35, "bottom": 725, "right": 225, "top": 727}
+	        },
+	        {
+	          "kind": "line",
+	          "sequence": 7,
+	          "bounds": {"left": 129, "bottom": 724, "right": 131, "top": 747}
+	        }
+	      ]
+	    }
+	  ]
+	}`
+
+	pipeline := New(nativepdf.NewIngestor(nativepdf.NewFixtureLoader()))
+	ctx := core.NewProcessingContext(nil, core.ProcessingOptions{})
+
+	document, err := pipeline.Run(ctx, core.Source{
+		Name:   "fixture.json",
+		Reader: strings.NewReader(fixtureJSON),
+	}, nil)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got, want := len(document.Kids), 2; got != want {
+		t.Fatalf("len(document.Kids) = %d, want %d", got, want)
+	}
+
+	tableNode, ok := document.Kids[0].(*model.Table)
+	if !ok {
+		t.Fatalf("document.Kids[0] type = %T, want *model.Table", document.Kids[0])
+	}
+	if tableNode.NumberOfRows != 2 || tableNode.NumberOfColumns != 2 {
+		t.Fatalf("table dimensions = %dx%d, want 2x2", tableNode.NumberOfRows, tableNode.NumberOfColumns)
+	}
+	if got := paragraphContent(tableNode.Rows[1].Cells[1].Kids[0]); got != "24" {
+		t.Fatalf("table second row second cell = %q, want 24", got)
+	}
+	if got := paragraphContent(document.Kids[1]); !strings.Contains(got, "This sentence") {
+		t.Fatalf("remaining paragraph = %q, want preserved prose", got)
+	}
+}
+
+func TestPipelineUsesNativeTableCandidatesToAnchorSemanticTable(t *testing.T) {
+	const fixtureJSON = `{
+	  "metadata": {"file_name": "fixture.json", "page_count": 1},
+	  "pages": [
+	    {
+	      "metadata": {"number": 1, "index": 0},
+	      "artifacts": [
+	        {
+	          "kind": "text",
+	          "sequence": 0,
+	          "bounds": {"left": 40, "bottom": 730, "right": 120, "top": 746},
+	          "text": "North"
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 1,
+	          "bounds": {"left": 180, "bottom": 730, "right": 220, "top": 746},
+	          "text": "18"
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 2,
+	          "bounds": {"left": 40, "bottom": 680, "right": 120, "top": 696},
+	          "text": "South"
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 3,
+	          "bounds": {"left": 180, "bottom": 680, "right": 220, "top": 696},
+	          "text": "24"
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 4,
+	          "bounds": {"left": 40, "bottom": 630, "right": 160, "top": 646},
+	          "text": "This sentence is deliberately long enough to look like prose."
+	        },
+	        {
+	          "kind": "text",
+	          "sequence": 5,
+	          "bounds": {"left": 180, "bottom": 630, "right": 360, "top": 646},
+	          "text": "This matching sentence should keep the text-only span from becoming a table."
+	        }
+	      ],
+	      "table_candidates": {
+	        "rectangles": [
+	          {"left": 35, "bottom": 675, "right": 225, "top": 747}
+	        ]
+	      }
+	    }
+	  ]
+	}`
+
+	pipeline := New(nativepdf.NewIngestor(nativepdf.NewFixtureLoader()))
+	ctx := core.NewProcessingContext(nil, core.ProcessingOptions{})
+
+	document, err := pipeline.Run(ctx, core.Source{
+		Name:   "fixture.json",
+		Reader: strings.NewReader(fixtureJSON),
+	}, nil)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got, want := len(document.Kids), 2; got != want {
+		t.Fatalf("len(document.Kids) = %d, want %d", got, want)
+	}
+
+	tableNode, ok := document.Kids[0].(*model.Table)
+	if !ok {
+		t.Fatalf("document.Kids[0] type = %T, want *model.Table", document.Kids[0])
+	}
+	if tableNode.NumberOfRows != 2 || tableNode.NumberOfColumns != 2 {
+		t.Fatalf("table dimensions = %dx%d, want 2x2", tableNode.NumberOfRows, tableNode.NumberOfColumns)
+	}
+	if got := paragraphContent(tableNode.Rows[0].Cells[0].Kids[0]); got != "North" {
+		t.Fatalf("table first cell = %q, want North", got)
+	}
+	if got := paragraphContent(document.Kids[1]); !strings.Contains(got, "This sentence") {
+		t.Fatalf("remaining paragraph = %q, want preserved prose", got)
+	}
+}
+
+func paragraphContent(element model.ContentElement) string {
+	para, ok := element.(*model.Paragraph)
+	if !ok {
+		return ""
+	}
+	return para.Content
+}

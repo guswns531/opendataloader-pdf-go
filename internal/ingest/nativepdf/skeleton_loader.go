@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -22,30 +23,36 @@ import (
 // future backend bring-up work.
 type SkeletonLoader struct {
 	pageMetadata []model.PageMetadata
+	parser       *DocumentParser
 }
 
 // NewSkeletonLoader returns the current native PDF loader skeleton.
-func NewSkeletonLoader() *SkeletonLoader { return &SkeletonLoader{} }
+func NewSkeletonLoader() *SkeletonLoader {
+	return &SkeletonLoader{
+		parser: NewDocumentParser(),
+	}
+}
 
 // NewSkeletonLoaderWithPages returns a skeleton loader preloaded with page
 // metadata shells for tests and future parser bring-up work.
 func NewSkeletonLoaderWithPages(pages []model.PageMetadata) *SkeletonLoader {
 	return &SkeletonLoader{
 		pageMetadata: append([]model.PageMetadata(nil), pages...),
+		parser:       NewDocumentParser(),
 	}
 }
 
 // OpenPath reads the PDF bytes from disk and returns a document handle shell.
-func (l *SkeletonLoader) OpenPath(_ context.Context, path string, _ OpenOptions) (DocumentHandle, error) {
+func (l *SkeletonLoader) OpenPath(_ context.Context, path string, opts OpenOptions) (DocumentHandle, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read pdf source: %w", err)
 	}
-	return l.open(filepath.Base(path), data), nil
+	return l.open(filepath.Base(path), data, opts)
 }
 
 // OpenReader reads the PDF bytes from a stream and returns a document handle shell.
-func (l *SkeletonLoader) OpenReader(_ context.Context, name string, r io.Reader, _ OpenOptions) (DocumentHandle, error) {
+func (l *SkeletonLoader) OpenReader(_ context.Context, name string, r io.Reader, opts OpenOptions) (DocumentHandle, error) {
 	if r == nil {
 		return nil, fmt.Errorf("native skeleton reader is nil")
 	}
@@ -53,34 +60,34 @@ func (l *SkeletonLoader) OpenReader(_ context.Context, name string, r io.Reader,
 	if err != nil {
 		return nil, fmt.Errorf("read pdf source: %w", err)
 	}
-	return l.open(name, data), nil
+	return l.open(name, data, opts)
 }
 
-func (l *SkeletonLoader) open(name string, data []byte) DocumentHandle {
-	pages := make([]model.PageMetadata, 0, len(l.pageMetadata))
-	sourcePages := l.pageMetadata
-	if len(sourcePages) == 0 {
-		sourcePages = shellPagesFromPDF(data)
+func (l *SkeletonLoader) open(name string, data []byte, opts OpenOptions) (DocumentHandle, error) {
+	parser := l.parser
+	if parser == nil {
+		parser = NewDocumentParser()
 	}
-	for i, page := range sourcePages {
-		if page.Index == 0 && i > 0 {
-			page.Index = model.PageIndex(i)
-		}
-		if page.Number <= 0 {
-			page.Number = model.PageNumber(i + 1)
-		}
-		pages = append(pages, page)
+	result, err := parser.Parse(name, data, opts, l.pageMetadata)
+	if err != nil {
+		return nil, err
 	}
-	artifactsByPage := shellArtifactsFromPDF(data, pages)
+
+	pages := make([]model.PageMetadata, 0, len(result.Pages))
+	artifactsByPage := make([][]*model.RawArtifact, 0, len(result.Pages))
+	for _, page := range result.Pages {
+		pages = append(pages, page.Metadata)
+		artifactsByPage = append(artifactsByPage, cloneArtifacts(page.Artifacts))
+	}
+
 	return &skeletonDocumentHandle{
-		metadata: model.DocumentMetadata{
-			FileName:  name,
-			PageCount: len(pages),
-		},
+		metadata:        result.Metadata,
 		raw:             append([]byte(nil), data...),
 		pages:           pages,
 		artifactsByPage: artifactsByPage,
-	}
+		tableByPage:     tableByPageFromParsedPages(result.Pages),
+		structByPage:    structByPageFromParsedPages(result.Pages),
+	}, nil
 }
 
 type skeletonDocumentHandle struct {
@@ -88,6 +95,8 @@ type skeletonDocumentHandle struct {
 	raw             []byte
 	pages           []model.PageMetadata
 	artifactsByPage [][]*model.RawArtifact
+	tableByPage     []*TableCandidateSet
+	structByPage    []*StructNode
 }
 
 func (h *skeletonDocumentHandle) Metadata() model.DocumentMetadata {
@@ -107,8 +116,10 @@ func (h *skeletonDocumentHandle) Page(pageIndex int) (PageHandle, error) {
 		artifacts = cloneArtifacts(h.artifactsByPage[pageIndex])
 	}
 	return &skeletonPageHandle{
-		metadata:  h.pages[pageIndex],
-		artifacts: artifacts,
+		metadata:        h.pages[pageIndex],
+		artifacts:       artifacts,
+		tableCandidates: tableCandidateAt(h.tableByPage, pageIndex),
+		structTree:      structTreeAt(h.structByPage, pageIndex),
 	}, nil
 }
 
@@ -118,29 +129,72 @@ func (h *skeletonDocumentHandle) Close() error {
 }
 
 type skeletonPageHandle struct {
-	metadata  model.PageMetadata
-	artifacts []*model.RawArtifact
+	metadata        model.PageMetadata
+	artifacts       []*model.RawArtifact
+	tableCandidates *TableCandidateSet
+	structTree      *StructNode
 }
 
 func (h *skeletonPageHandle) Metadata() model.PageMetadata {
 	return h.metadata
 }
 
-func (h *skeletonPageHandle) Artifacts(_ context.Context, _ ArtifactOptions) ([]*model.RawArtifact, error) {
-	return cloneArtifacts(h.artifacts), nil
+func (h *skeletonPageHandle) Artifacts(_ context.Context, opts ArtifactOptions) ([]*model.RawArtifact, error) {
+	if len(h.artifacts) == 0 {
+		return nil, nil
+	}
+	if includeAllArtifacts(opts) {
+		return cloneArtifacts(h.artifacts), nil
+	}
+
+	filtered := make([]*model.RawArtifact, 0, len(h.artifacts))
+	for _, artifact := range h.artifacts {
+		if artifact == nil {
+			continue
+		}
+		if includeArtifactKind(artifact.Kind, opts) {
+			filtered = append(filtered, cloneArtifact(artifact))
+		}
+	}
+	return filtered, nil
 }
 
 func (h *skeletonPageHandle) TableCandidates(_ context.Context) (*TableCandidateSet, error) {
-	return nil, nil
+	return cloneTableCandidateSet(h.tableCandidates), nil
 }
 
 func (h *skeletonPageHandle) StructTree(_ context.Context) (*StructNode, error) {
-	return nil, nil
+	return cloneStructNode(h.structTree), nil
+}
+
+func structByPageFromParsedPages(pages []ParsedPage) []*StructNode {
+	out := make([]*StructNode, 0, len(pages))
+	for _, page := range pages {
+		out = append(out, cloneStructNode(page.StructTree))
+	}
+	return out
+}
+
+func structTreeAt(trees []*StructNode, pageIndex int) *StructNode {
+	if pageIndex < 0 || pageIndex >= len(trees) {
+		return nil
+	}
+	return cloneStructNode(trees[pageIndex])
 }
 
 var (
-	pageTypePattern = regexp.MustCompile(`/Type\s*/Page\b`)
-	mediaBoxPattern = regexp.MustCompile(`/MediaBox\s*\[\s*([-+]?[0-9]*\.?[0-9]+)\s+([-+]?[0-9]*\.?[0-9]+)\s+([-+]?[0-9]*\.?[0-9]+)\s+([-+]?[0-9]*\.?[0-9]+)\s*\]`)
+	pageTypePattern       = regexp.MustCompile(`/Type\s*/Page\b`)
+	mediaBoxPattern       = regexp.MustCompile(`/MediaBox\s*\[\s*([-+]?[0-9]*\.?[0-9]+)\s+([-+]?[0-9]*\.?[0-9]+)\s+([-+]?[0-9]*\.?[0-9]+)\s+([-+]?[0-9]*\.?[0-9]+)\s*\]`)
+	literalStringPattern  = regexp.MustCompile(`\((?:\\.|[^\\()])*\)`)
+	tjPattern             = regexp.MustCompile(`\((?:\\.|[^\\()])*\)\s*Tj`)
+	tjArrayPattern        = regexp.MustCompile(`\[(?s:.*?)\]\s*TJ`)
+	hexTjPattern          = regexp.MustCompile(`<([0-9A-Fa-f]+)>\s*Tj`)
+	arrayTextTokenPattern = regexp.MustCompile(`\((?:\\.|[^\\()])*\)|<([0-9A-Fa-f]+)>`)
+	bfcharBlockPattern    = regexp.MustCompile(`(?s)\d+\s+beginbfchar(.*?)endbfchar`)
+	bfrangeBlockPattern   = regexp.MustCompile(`(?s)\d+\s+beginbfrange(.*?)endbfrange`)
+	bfcharMappingPattern  = regexp.MustCompile(`<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>`)
+	bfrangeMappingPattern = regexp.MustCompile(`<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*(\[[^\]]+\]|<([0-9A-Fa-f]+)>)`)
+	hexValuePattern       = regexp.MustCompile(`<([0-9A-Fa-f]+)>`)
 )
 
 func shellPagesFromPDF(data []byte) []model.PageMetadata {
@@ -236,6 +290,9 @@ func shellArtifactsFromPDF(data []byte, pages []model.PageMetadata) [][]*model.R
 	if len(pages) == 0 {
 		return nil
 	}
+	if positioned := extractPositionedTextArtifacts(data, pages); hasUsablePositionedArtifacts(positioned, pages) {
+		return positioned
+	}
 	texts := extractTextShellStrings(data)
 	artifactsByPage := make([][]*model.RawArtifact, len(pages))
 	if len(texts) == 0 {
@@ -267,17 +324,94 @@ func shellArtifactsFromPDF(data []byte, pages []model.PageMetadata) [][]*model.R
 		}
 		artifactsByPage[pageIndex] = artifacts
 	}
+	if hasArtifacts(artifactsByPage) {
+		return artifactsByPage
+	}
+	if len(pages) == 1 {
+		if texts := extractLiteralStrings(data); len(texts) > 0 {
+			pageMeta := pages[0]
+			artifacts := make([]*model.RawArtifact, 0, len(texts))
+			for i, text := range texts {
+				artifacts = append(artifacts, &model.RawArtifact{
+					ID:         model.ArtifactID(i + 1),
+					Kind:       model.ArtifactKindText,
+					PageIndex:  pageMeta.Index,
+					PageNumber: pageMeta.Number,
+					Sequence:   i,
+					Bounds:     shellBoundsForText(pageMeta, i, text),
+					Text:       text,
+					Style: model.TextProperties{
+						Font:     "skeleton",
+						FontSize: 12,
+						Content:  text,
+					},
+				})
+			}
+			return [][]*model.RawArtifact{artifacts}
+		}
+	}
 	return artifactsByPage
 }
 
-var literalStringPattern = regexp.MustCompile(`\((?:\\.|[^\\()])*\)`)
-var tjPattern = regexp.MustCompile(`\((?:\\.|[^\\()])*\)\s*Tj`)
-var tjArrayPattern = regexp.MustCompile(`\[(?s:.*?)\]\s*TJ`)
-var hexTjPattern = regexp.MustCompile(`<([0-9A-Fa-f]+)>\s*Tj`)
-var hexStringPattern = regexp.MustCompile(`<([0-9A-Fa-f]+)>`)
-var arrayTextTokenPattern = regexp.MustCompile(`\((?:\\.|[^\\()])*\)|<([0-9A-Fa-f]+)>`)
-var bfcharBlockPattern = regexp.MustCompile(`(?s)\d+\s+beginbfchar(.*?)endbfchar`)
-var bfcharMappingPattern = regexp.MustCompile(`<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>`)
+func tableByPageFromParsedPages(pages []ParsedPage) []*TableCandidateSet {
+	if len(pages) == 0 {
+		return nil
+	}
+	out := make([]*TableCandidateSet, len(pages))
+	for i, page := range pages {
+		out[i] = cloneTableCandidateSet(page.TableCandidates)
+	}
+	return out
+}
+
+func tableCandidateAt(tables []*TableCandidateSet, pageIndex int) *TableCandidateSet {
+	if pageIndex < 0 || pageIndex >= len(tables) {
+		return nil
+	}
+	return cloneTableCandidateSet(tables[pageIndex])
+}
+
+func hasArtifacts(pages [][]*model.RawArtifact) bool {
+	for _, page := range pages {
+		if len(page) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func hasUsablePositionedArtifacts(pages [][]*model.RawArtifact, metadata []model.PageMetadata) bool {
+	if len(pages) == 0 {
+		return false
+	}
+
+	for pageIndex, artifacts := range pages {
+		if len(artifacts) == 0 {
+			continue
+		}
+		pageMeta := model.PageMetadata{}
+		if pageIndex >= 0 && pageIndex < len(metadata) {
+			pageMeta = metadata[pageIndex]
+		}
+		pageBounds, ok := pageBoxFromMetadata(pageMeta)
+		if !ok {
+			if len(artifacts) > 0 {
+				return true
+			}
+			continue
+		}
+		for _, artifact := range artifacts {
+			if artifact == nil || strings.TrimSpace(artifact.Text) == "" {
+				continue
+			}
+			if !artifact.Bounds.IsZero() && artifact.Bounds.Intersects(pageBounds) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
 
 func extractTextShellStrings(data []byte) []string {
 	glyphMap := extractToUnicodeMap(data)
@@ -288,6 +422,10 @@ func extractTextShellStrings(data []byte) []string {
 
 	texts := extractContentStreamStrings(data, glyphMap)
 	if len(texts) > 0 {
+		return dedupeStrings(texts)
+	}
+
+	if texts := extractLiteralStringsFromDecodedStreams(data); len(texts) > 0 {
 		return dedupeStrings(texts)
 	}
 
@@ -328,8 +466,21 @@ func extractContentStreamStrings(data []byte, glyphMap map[string]string) []stri
 	if len(data) == 0 {
 		return nil
 	}
-	out := make([]string, 0)
+	if out := extractContentTextByOperators(data, glyphMap); len(out) > 0 {
+		return out
+	}
+	if out := extractContentTextByRegex(data, glyphMap); len(out) > 0 {
+		return out
+	}
+	return nil
+}
 
+func extractContentTextByRegex(data []byte, glyphMap map[string]string) []string {
+	if len(data) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0)
 	for _, match := range tjPattern.FindAll(data, -1) {
 		for _, text := range extractLiteralStrings(match) {
 			out = append(out, text)
@@ -368,16 +519,22 @@ func extractTJArrayString(data []byte, glyphMap map[string]string) string {
 				builder.WriteString(text)
 			}
 		case '<':
-			hexMatches := hexStringPattern.FindAllSubmatch(token, -1)
-			for _, hexMatch := range hexMatches {
-				if len(hexMatch) < 2 {
-					continue
-				}
-				builder.WriteString(decodeHexGlyphString(hexMatch[1], glyphMap))
-			}
+			builder.WriteString(decodeHexGlyphString(token[1:len(token)-1], glyphMap))
 		}
 	}
 	return strings.TrimSpace(builder.String())
+}
+
+func extractLiteralStringsFromDecodedStreams(data []byte) []string {
+	decodedStreams := extractDecodedStreams(data)
+	if len(decodedStreams) == 0 {
+		return nil
+	}
+	out := make([]string, 0)
+	for _, decoded := range decodedStreams {
+		out = append(out, extractLiteralStrings(decoded)...)
+	}
+	return out
 }
 
 func extractStringsFromStreams(data []byte, glyphMap map[string]string) []string {
@@ -474,7 +631,7 @@ func inflateStream(data []byte) ([]byte, bool) {
 		return nil, false
 	}
 	defer reader.Close()
-	decoded, err := io.ReadAll(reader)
+	decoded, err := readAllBounded(reader, maxDecodedStreamBytes)
 	if err != nil {
 		return nil, false
 	}
@@ -512,17 +669,13 @@ func extractToUnicodeMap(data []byte) map[string]string {
 			if len(block) < 2 {
 				continue
 			}
-			for _, mapping := range bfcharMappingPattern.FindAllSubmatch(block[1], -1) {
-				if len(mapping) < 3 {
-					continue
-				}
-				src := strings.ToUpper(string(mapping[1]))
-				dst := decodeUnicodeHex(mapping[2])
-				if src == "" || dst == "" {
-					continue
-				}
-				out[src] = dst
+			mergeUnicodeMappings(out, block[1])
+		}
+		for _, block := range bfrangeBlockPattern.FindAllSubmatch(decoded, -1) {
+			if len(block) < 2 {
+				continue
 			}
+			mergeUnicodeRangeMappings(out, block[1])
 		}
 	}
 	if len(out) == 0 {
@@ -537,10 +690,23 @@ func decodeHexGlyphString(hexBytes []byte, glyphMap map[string]string) string {
 		return ""
 	}
 	if glyphMap != nil {
+		widths := glyphCodeWidths(glyphMap)
 		var builder strings.Builder
-		for i := 0; i+4 <= len(hex); i += 4 {
-			if mapped, ok := glyphMap[hex[i:i+4]]; ok {
-				builder.WriteString(mapped)
+		for i := 0; i < len(hex); {
+			matched := false
+			for _, width := range widths {
+				if width <= 0 || i+width > len(hex) {
+					continue
+				}
+				if mapped, ok := glyphMap[hex[i:i+width]]; ok {
+					builder.WriteString(mapped)
+					i += width
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				break
 			}
 		}
 		if builder.Len() > 0 {
@@ -567,6 +733,99 @@ func decodeUnicodeHex(hexBytes []byte) string {
 		runes = append(runes, rune(value))
 	}
 	return string(runes)
+}
+
+func mergeUnicodeMappings(out map[string]string, block []byte) {
+	for _, mapping := range bfcharMappingPattern.FindAllSubmatch(block, -1) {
+		if len(mapping) < 3 {
+			continue
+		}
+		src := strings.ToUpper(string(mapping[1]))
+		dst := decodeUnicodeHex(mapping[2])
+		if src == "" || dst == "" {
+			continue
+		}
+		out[src] = dst
+	}
+}
+
+func mergeUnicodeRangeMappings(out map[string]string, block []byte) {
+	for _, mapping := range bfrangeMappingPattern.FindAllSubmatch(block, -1) {
+		if len(mapping) < 4 {
+			continue
+		}
+		startHex := strings.ToUpper(string(mapping[1]))
+		endHex := strings.ToUpper(string(mapping[2]))
+		targetSpec := strings.TrimSpace(string(mapping[3]))
+		if startHex == "" || endHex == "" || targetSpec == "" {
+			continue
+		}
+		startValue, err := strconv.ParseUint(startHex, 16, 64)
+		if err != nil {
+			continue
+		}
+		endValue, err := strconv.ParseUint(endHex, 16, 64)
+		if err != nil || endValue < startValue {
+			continue
+		}
+
+		if strings.HasPrefix(targetSpec, "[") {
+			matched := hexValuePattern.FindAllSubmatch([]byte(targetSpec), -1)
+			if len(matched) == 0 {
+				continue
+			}
+			for i, entry := range matched {
+				if len(entry) < 2 {
+					continue
+				}
+				key := strings.ToUpper(padHex(startValue+uint64(i), len(startHex)))
+				out[key] = decodeUnicodeHex(entry[1])
+			}
+			continue
+		}
+
+		targetHex := strings.Trim(targetSpec, "<>")
+		if targetHex == "" {
+			continue
+		}
+		targetStart, err := strconv.ParseUint(targetHex, 16, 64)
+		if err != nil {
+			continue
+		}
+		for code := startValue; code <= endValue; code++ {
+			key := strings.ToUpper(padHex(code, len(startHex)))
+			out[key] = string(rune(targetStart + (code - startValue)))
+		}
+	}
+}
+
+func padHex(value uint64, width int) string {
+	if width <= 0 {
+		width = 2
+	}
+	return fmt.Sprintf("%0*X", width, value)
+}
+
+func glyphCodeWidths(glyphMap map[string]string) []int {
+	if len(glyphMap) == 0 {
+		return nil
+	}
+	widthSet := make(map[int]struct{})
+	for key := range glyphMap {
+		if key == "" {
+			continue
+		}
+		widthSet[len(key)] = struct{}{}
+	}
+	if len(widthSet) == 0 {
+		return nil
+	}
+	widths := make([]int, 0, len(widthSet))
+	for width := range widthSet {
+		widths = append(widths, width)
+	}
+	sort.Sort(sort.Reverse(sort.IntSlice(widths)))
+	return widths
 }
 
 func distributeTextAcrossPages(texts []string, pageCount int) [][]string {

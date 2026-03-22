@@ -25,6 +25,8 @@ const (
 	defaultMinColumns      = 2
 	defaultRowTolerance    = 6.0
 	defaultColumnTolerance = 10.0
+	artifactZonePadding    = 6.0
+	artifactMergeGap       = 12.0
 )
 
 // Detect scans elements and replaces simple aligned text runs with tables.
@@ -32,8 +34,82 @@ func Detect(elements []model.ContentElement) []model.ContentElement {
 	return Detector{}.Detect(elements)
 }
 
+// DetectWithArtifacts uses low-level line/path artifacts as conservative table-zone hints.
+func DetectWithArtifacts(elements []model.ContentElement, artifacts []*model.RawArtifact) []model.ContentElement {
+	return Detector{}.DetectWithArtifacts(elements, artifacts)
+}
+
 // Detect scans elements and replaces simple aligned text runs with tables.
 func (d Detector) Detect(elements []model.ContentElement) []model.ContentElement {
+	return d.detectWithoutArtifactHints(elements)
+}
+
+// DetectWithArtifacts scans elements and prefers artifact-hinted table zones before falling back.
+func (d Detector) DetectWithArtifacts(elements []model.ContentElement, artifacts []*model.RawArtifact) []model.ContentElement {
+	d = d.withDefaults()
+	zones := d.tableZonesFromArtifacts(artifacts)
+	if len(zones) == 0 {
+		return d.detectWithoutArtifactHints(elements)
+	}
+
+	out := make([]model.ContentElement, 0, len(elements))
+	run := make([]cellCandidate, 0, 8)
+	raw := make([]model.ContentElement, 0, 8)
+	var page pageKey
+	havePage := false
+	hinted := false
+
+	flush := func() {
+		if len(run) == 0 {
+			return
+		}
+		if hinted {
+			if segment, ok := d.transformRunWithHints(raw, run); ok {
+				out = append(out, segment...)
+			} else {
+				out = append(out, d.transformRun(raw, run)...)
+			}
+		} else {
+			out = append(out, d.transformRun(raw, run)...)
+		}
+		run = run[:0]
+		raw = raw[:0]
+		havePage = false
+		hinted = false
+	}
+
+	for _, element := range elements {
+		if element == nil {
+			continue
+		}
+
+		candidate, ok := d.candidateFromElement(element)
+		if !ok {
+			flush()
+			out = append(out, element)
+			continue
+		}
+
+		if havePage && candidate.page != page {
+			flush()
+		}
+		if !havePage {
+			page = candidate.page
+			havePage = true
+		}
+
+		candidate.position = len(raw)
+		candidate.hinted = boxInAnyZone(candidate.bounds, zones)
+		hinted = hinted || candidate.hinted
+		run = append(run, candidate)
+		raw = append(raw, element)
+	}
+
+	flush()
+	return out
+}
+
+func (d Detector) detectWithoutArtifactHints(elements []model.ContentElement) []model.ContentElement {
 	d = d.withDefaults()
 
 	out := make([]model.ContentElement, 0, len(elements))
@@ -94,12 +170,14 @@ type cellCandidate struct {
 	index      int
 	position   int
 	text       string
+	hinted     bool
 	hasContent bool
 }
 
 type rowCluster struct {
 	items    []cellCandidate
 	bounds   model.Box
+	hinted   bool
 	startPos int
 	endPos   int
 }
@@ -190,6 +268,43 @@ func (d Detector) transformRun(raw []model.ContentElement, run []cellCandidate) 
 	return out
 }
 
+func (d Detector) transformRunWithHints(raw []model.ContentElement, run []cellCandidate) ([]model.ContentElement, bool) {
+	if len(run) < d.MinRows*d.MinColumns {
+		return append([]model.ContentElement(nil), raw...), false
+	}
+
+	rowTol := d.rowTolerance(run)
+	rows := groupRows(run, rowTol)
+	if len(rows) < d.MinRows {
+		return append([]model.ContentElement(nil), raw...), false
+	}
+
+	for i := range rows {
+		sortCells(rows[i].items)
+	}
+
+	columnTol := d.columnTolerance(run)
+	start, end, ok := d.bestHintedTableSpan(rows, columnTol, rowTol*2)
+	if !ok {
+		return append([]model.ContentElement(nil), raw...), false
+	}
+
+	if !looksTableLike(rows[start : end+1]) {
+		return append([]model.ContentElement(nil), raw...), false
+	}
+
+	table := d.buildTableFromRows(rows[start : end+1])
+	if table == nil {
+		return append([]model.ContentElement(nil), raw...), false
+	}
+
+	out := make([]model.ContentElement, 0, len(raw)+1)
+	out = append(out, raw[:rows[start].startPos]...)
+	out = append(out, table)
+	out = append(out, raw[rows[end].endPos+1:]...)
+	return out, true
+}
+
 func groupRows(candidates []cellCandidate, rowTol float64) []rowCluster {
 	sorted := append([]cellCandidate(nil), candidates...)
 	sort.SliceStable(sorted, func(i, j int) bool {
@@ -214,6 +329,7 @@ func groupRows(candidates []cellCandidate, rowTol float64) []rowCluster {
 			rows = append(rows, rowCluster{
 				items:    []cellCandidate{candidate},
 				bounds:   candidate.bounds,
+				hinted:   candidate.hinted,
 				startPos: candidate.position,
 				endPos:   candidate.position,
 			})
@@ -222,6 +338,7 @@ func groupRows(candidates []cellCandidate, rowTol float64) []rowCluster {
 		last := &rows[len(rows)-1]
 		last.items = append(last.items, candidate)
 		last.bounds = last.bounds.Union(candidate.bounds)
+		last.hinted = last.hinted || candidate.hinted
 		if candidate.position < last.startPos {
 			last.startPos = candidate.position
 		}
@@ -271,6 +388,77 @@ func (d Detector) bestTableSpan(rows []rowCluster, columnTol float64) (int, int,
 		return 0, 0, false
 	}
 	return bestStart, bestEnd, true
+}
+
+func (d Detector) bestHintedTableSpan(rows []rowCluster, columnTol, gapTol float64) (int, int, bool) {
+	bestStart := -1
+	bestEnd := -1
+	bestHintedRows := 0
+	bestLength := 0
+
+	for anchor := 0; anchor < len(rows); anchor++ {
+		if !rows[anchor].hinted {
+			continue
+		}
+		if len(rows[anchor].items) < d.MinColumns {
+			continue
+		}
+		if !isRowSeparated(rows[anchor].items, d.ColumnTolerance) {
+			continue
+		}
+
+		start := anchor
+		for prev := anchor - 1; prev >= 0; prev-- {
+			if !d.rowsHintCompatible(rows[prev], rows[prev+1], columnTol, gapTol) {
+				break
+			}
+			start = prev
+		}
+
+		end := anchor
+		for next := anchor + 1; next < len(rows); next++ {
+			if !d.rowsHintCompatible(rows[next-1], rows[next], columnTol, gapTol) {
+				break
+			}
+			end = next
+		}
+
+		length := end - start + 1
+		if length < d.MinRows {
+			continue
+		}
+
+		hintedRows := 0
+		for i := start; i <= end; i++ {
+			if rows[i].hinted {
+				hintedRows++
+			}
+		}
+		if hintedRows > bestHintedRows || (hintedRows == bestHintedRows && length > bestLength) {
+			bestStart = start
+			bestEnd = end
+			bestHintedRows = hintedRows
+			bestLength = length
+		}
+	}
+
+	if bestStart < 0 {
+		return 0, 0, false
+	}
+	return bestStart, bestEnd, true
+}
+
+func (d Detector) rowsHintCompatible(anchor, candidate rowCluster, columnTol, gapTol float64) bool {
+	if len(anchor.items) < d.MinColumns || len(candidate.items) != len(anchor.items) {
+		return false
+	}
+	if !isRowSeparated(candidate.items, d.ColumnTolerance) {
+		return false
+	}
+	if !rowsAligned(anchor.items, candidate.items, columnTol) {
+		return false
+	}
+	return boxVerticalGap(anchor.bounds, candidate.bounds) <= gapTol
 }
 
 func (d Detector) buildTableFromRows(rows []rowCluster) *model.Table {
@@ -599,4 +787,167 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (d Detector) tableZonesFromArtifacts(artifacts []*model.RawArtifact) []model.Box {
+	clusters := make([]tableZoneCluster, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		box, horiz, vert, rect, ok := tableZoneCandidateFromArtifact(artifact)
+		if !ok {
+			continue
+		}
+		merged := false
+		for i := range clusters {
+			if boxesNear(clusters[i].bounds, box, artifactMergeGap) {
+				clusters[i].bounds = clusters[i].bounds.Union(box)
+				clusters[i].horizontal = clusters[i].horizontal || horiz
+				clusters[i].vertical = clusters[i].vertical || vert
+				clusters[i].rectangle = clusters[i].rectangle || rect
+				clusters[i].count++
+				merged = true
+				break
+			}
+		}
+		if merged {
+			continue
+		}
+		clusters = append(clusters, tableZoneCluster{
+			bounds:     box,
+			horizontal: horiz,
+			vertical:   vert,
+			rectangle:  rect,
+			count:      1,
+		})
+	}
+
+	zones := make([]model.Box, 0, len(clusters))
+	for _, cluster := range clusters {
+		if cluster.count < 2 && !cluster.rectangle {
+			continue
+		}
+		if !cluster.rectangle && !(cluster.horizontal && cluster.vertical) {
+			continue
+		}
+		zones = append(zones, expandBox(cluster.bounds, artifactZonePadding))
+	}
+	return zones
+}
+
+type tableZoneCluster struct {
+	bounds     model.Box
+	horizontal bool
+	vertical   bool
+	rectangle  bool
+	count      int
+}
+
+func tableZoneCandidateFromArtifact(artifact *model.RawArtifact) (model.Box, bool, bool, bool, bool) {
+	if artifact == nil {
+		return model.Box{}, false, false, false, false
+	}
+	box := artifact.Bounds.Normalize()
+	if box.IsZero() {
+		if bounds, ok := artifact.Boxes.Bounds(); ok {
+			box = bounds.Normalize()
+		}
+	}
+	if box.IsZero() {
+		return model.Box{}, false, false, false, false
+	}
+
+	width := box.Width()
+	height := box.Height()
+	switch artifact.Kind {
+	case model.ArtifactKindLine:
+		if width <= 0 || height <= 0 {
+			return model.Box{}, false, false, false, false
+		}
+		if width >= height*3 {
+			return box, true, false, false, true
+		}
+		if height >= width*3 {
+			return box, false, true, false, true
+		}
+		return model.Box{}, false, false, false, false
+	case model.ArtifactKindPath:
+		if width <= 0 || height <= 0 {
+			return model.Box{}, false, false, false, false
+		}
+		horizontal := width >= height*3
+		vertical := height >= width*3
+		rectangle := width >= 12 && height >= 12
+		if !horizontal && !vertical && !rectangle {
+			return model.Box{}, false, false, false, false
+		}
+		return box, horizontal, vertical, rectangle, true
+	default:
+		return model.Box{}, false, false, false, false
+	}
+}
+
+func boxInAnyZone(box model.Box, zones []model.Box) bool {
+	box = box.Normalize()
+	if box.IsZero() {
+		return false
+	}
+	for _, zone := range zones {
+		if boxesIntersect(zone, box) || boxInside(zone, box) || pointInBox(zone, boxCenterX(box), boxCenterY(box)) {
+			return true
+		}
+	}
+	return false
+}
+
+func boxesNear(a, b model.Box, gap float64) bool {
+	a = expandBox(a.Normalize(), gap)
+	b = b.Normalize()
+	return boxesIntersect(a, b) || boxInside(a, b) || boxInside(b, a)
+}
+
+func boxesIntersect(a, b model.Box) bool {
+	a = a.Normalize()
+	b = b.Normalize()
+	if a.IsZero() || b.IsZero() {
+		return false
+	}
+	return a.Left <= b.Right && a.Right >= b.Left && a.Bottom <= b.Top && a.Top >= b.Bottom
+}
+
+func boxInside(outer, inner model.Box) bool {
+	outer = outer.Normalize()
+	inner = inner.Normalize()
+	if outer.IsZero() || inner.IsZero() {
+		return false
+	}
+	return inner.Left >= outer.Left && inner.Right <= outer.Right && inner.Bottom >= outer.Bottom && inner.Top <= outer.Top
+}
+
+func pointInBox(box model.Box, x, y float64) bool {
+	box = box.Normalize()
+	if box.IsZero() {
+		return false
+	}
+	return x >= box.Left && x <= box.Right && y >= box.Bottom && y <= box.Top
+}
+
+func expandBox(box model.Box, padding float64) model.Box {
+	box = box.Normalize()
+	if box.IsZero() {
+		return box
+	}
+	return model.Box{
+		Left:   box.Left - padding,
+		Bottom: box.Bottom - padding,
+		Right:  box.Right + padding,
+		Top:    box.Top + padding,
+	}
+}
+
+func containsTable(elements []model.ContentElement) bool {
+	for _, element := range elements {
+		if _, ok := element.(*model.Table); ok {
+			return true
+		}
+	}
+	return false
 }

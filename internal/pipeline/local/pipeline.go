@@ -165,7 +165,7 @@ func applyTableDetection(document *model.Document) {
 		if page == nil || len(page.Kids) == 0 {
 			continue
 		}
-		page.Kids = table.Detect(page.Kids)
+		page.Kids = table.DetectWithArtifacts(page.Kids, page.Artifacts)
 	}
 }
 

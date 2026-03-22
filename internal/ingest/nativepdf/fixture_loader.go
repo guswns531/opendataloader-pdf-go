@@ -132,10 +132,10 @@ func (f fixtureDocumentMetadata) toModel() model.DocumentMetadata {
 }
 
 type fixturePage struct {
-	Metadata        fixturePageMetadata          `json:"metadata"`
-	Artifacts       []fixtureArtifact            `json:"artifacts"`
-	TableCandidates *fixtureTableCandidateSet    `json:"table_candidates,omitempty"`
-	StructTree      *fixtureStructNode           `json:"struct_tree,omitempty"`
+	Metadata        fixturePageMetadata       `json:"metadata"`
+	Artifacts       []fixtureArtifact         `json:"artifacts"`
+	TableCandidates *fixtureTableCandidateSet `json:"table_candidates,omitempty"`
+	StructTree      *fixtureStructNode        `json:"struct_tree,omitempty"`
 }
 
 func (f fixturePage) toHandle(position int) (*fixturePageHandle, error) {
@@ -208,17 +208,20 @@ func (f fixturePageMetadata) toModel() model.PageMetadata {
 }
 
 type fixtureArtifact struct {
-	Kind       model.ArtifactKind   `json:"kind"`
-	PageIndex  *model.PageIndex     `json:"page_index,omitempty"`
-	PageNumber *model.PageNumber    `json:"page_number,omitempty"`
-	Sequence   int                  `json:"sequence"`
-	Bounds     model.Box            `json:"bounds,omitempty"`
-	Boxes      model.MultiBox       `json:"boxes,omitempty"`
-	Text       string               `json:"text,omitempty"`
-	Data       []byte               `json:"data,omitempty"`
-	Format     model.ImageFormat    `json:"format,omitempty"`
-	Style      fixtureTextStyle     `json:"style,omitempty"`
-	Links      fixtureLinkField     `json:"links,omitempty"`
+	Kind             model.ArtifactKind `json:"kind"`
+	PageIndex        *model.PageIndex   `json:"page_index,omitempty"`
+	PageNumber       *model.PageNumber  `json:"page_number,omitempty"`
+	Sequence         int                `json:"sequence"`
+	Bounds           model.Box          `json:"bounds,omitempty"`
+	Boxes            model.MultiBox     `json:"boxes,omitempty"`
+	Text             string             `json:"text,omitempty"`
+	Data             []byte             `json:"data,omitempty"`
+	Format           model.ImageFormat  `json:"format,omitempty"`
+	ColorSpace       string             `json:"color_space,omitempty"`
+	BitsPerComponent int                `json:"bits_per_component,omitempty"`
+	Filters          []string           `json:"filters,omitempty"`
+	Style            fixtureTextStyle   `json:"style,omitempty"`
+	Links            fixtureLinkField   `json:"links,omitempty"`
 }
 
 func (f fixtureArtifact) toModel(page model.PageMetadata) (*model.RawArtifact, error) {
@@ -239,17 +242,20 @@ func (f fixtureArtifact) toModel(page model.PageMetadata) (*model.RawArtifact, e
 	}
 
 	artifact := &model.RawArtifact{
-		Kind:       f.Kind,
-		PageIndex:  pageIndex,
-		PageNumber: pageNumber,
-		Sequence:   f.Sequence,
-		Bounds:     f.Bounds,
-		Boxes:      append(model.MultiBox(nil), f.Boxes...),
-		Text:       f.Text,
-		Data:       append([]byte(nil), f.Data...),
-		Format:     f.Format,
-		Style:      f.Style.toModel(),
-		Links:      f.Links.toModel(),
+		Kind:             f.Kind,
+		PageIndex:        pageIndex,
+		PageNumber:       pageNumber,
+		Sequence:         f.Sequence,
+		Bounds:           f.Bounds,
+		Boxes:            append(model.MultiBox(nil), f.Boxes...),
+		Text:             f.Text,
+		Data:             append([]byte(nil), f.Data...),
+		Format:           f.Format,
+		ColorSpace:       f.ColorSpace,
+		BitsPerComponent: f.BitsPerComponent,
+		Filters:          append([]string(nil), f.Filters...),
+		Style:            f.Style.toModel(),
+		Links:            f.Links.toModel(),
 	}
 	return artifact, nil
 }
@@ -348,11 +354,12 @@ func (f *fixtureStructNode) toModel() *StructNode {
 		return nil
 	}
 	node := &StructNode{
-		Type:        f.Type,
-		PageIndex:   f.PageIndex,
-		Bounds:      f.Bounds,
-		Kids:        make([]*StructNode, 0, len(f.Kids)),
-		ArtifactIDs: append([]model.ArtifactID(nil), f.ArtifactIDs...),
+		Type:             f.Type,
+		PageIndex:        f.PageIndex,
+		Bounds:           f.Bounds,
+		Kids:             make([]*StructNode, 0, len(f.Kids)),
+		ArtifactIDs:      append([]model.ArtifactID(nil), f.ArtifactIDs...),
+		MarkedContentIDs: nil,
 	}
 	for _, kid := range f.Kids {
 		node.Kids = append(node.Kids, kid.toModel())
@@ -468,11 +475,12 @@ func cloneStructNode(node *StructNode) *StructNode {
 		return nil
 	}
 	cloned := &StructNode{
-		Type:        node.Type,
-		PageIndex:   node.PageIndex,
-		Bounds:      node.Bounds,
-		Kids:        make([]*StructNode, 0, len(node.Kids)),
-		ArtifactIDs: append([]model.ArtifactID(nil), node.ArtifactIDs...),
+		Type:             node.Type,
+		PageIndex:        node.PageIndex,
+		Bounds:           node.Bounds,
+		Kids:             make([]*StructNode, 0, len(node.Kids)),
+		ArtifactIDs:      append([]model.ArtifactID(nil), node.ArtifactIDs...),
+		MarkedContentIDs: append([]int(nil), node.MarkedContentIDs...),
 	}
 	for _, kid := range node.Kids {
 		cloned.Kids = append(cloned.Kids, cloneStructNode(kid))
