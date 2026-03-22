@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -145,6 +147,38 @@ func TestIngestorRejectsMissingSource(t *testing.T) {
 	_, err := ingestor.Ingest(nil, core.Source{})
 	if err == nil {
 		t.Fatal("Ingest() error = nil, want error")
+	}
+}
+
+func TestIngestorWritesRawDumpWhenEnvSet(t *testing.T) {
+	dir := t.TempDir()
+	dumpPath := filepath.Join(dir, "raw-dump.json")
+	t.Setenv(rawDumpEnv, dumpPath)
+
+	loader := &stubLoader{
+		handle: &stubDocumentHandle{
+			metadata: model.DocumentMetadata{},
+			pages: []PageHandle{
+				&stubPageHandle{
+					metadata: model.PageMetadata{Number: 1},
+					artifacts: []*model.RawArtifact{
+						{
+							Kind:     model.ArtifactKindText,
+							Text:     "dump me",
+							Sequence: 0,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ingestor := NewIngestor(loader)
+	if _, err := ingestor.Ingest(nil, core.Source{Name: "sample.pdf", Reader: strings.NewReader("%PDF")}); err != nil {
+		t.Fatalf("Ingest() error = %v", err)
+	}
+	if _, err := os.Stat(dumpPath); err != nil {
+		t.Fatalf("expected raw dump file %s: %v", dumpPath, err)
 	}
 }
 

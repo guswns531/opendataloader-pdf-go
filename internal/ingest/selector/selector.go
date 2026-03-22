@@ -9,8 +9,6 @@ import (
 	"github.com/guswns531/opendataloader-pdf-go/internal/core"
 	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/fixture"
 	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/nativepdf"
-	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/pdfbridge"
-	"github.com/guswns531/opendataloader-pdf-go/internal/ingest/pdfruntime"
 )
 
 // Selector isolates runtime ingestion routing so the CLI and future wrappers
@@ -19,17 +17,15 @@ type Selector struct {
 	SemanticFixture core.Ingestor
 	NativeFixture   core.Ingestor
 	NativePDF       core.Ingestor
-	PDFBridge       core.Ingestor
 }
 
 // New returns a selector with the current default runtime paths.
 func New() Selector {
-	return Selector{
-		SemanticFixture: fixture.New(),
-		NativeFixture:   nativepdf.NewIngestor(nativepdf.NewFixtureLoader()),
-		NativePDF:       defaultNativePDFIngestor(),
-		PDFBridge:       TemporaryPDFBridge(),
-	}
+		return Selector{
+			SemanticFixture: fixture.New(),
+			NativeFixture:   nativepdf.NewIngestor(nativepdf.NewFixtureLoader()),
+			NativePDF:       defaultNativePDFIngestor(),
+		}
 }
 
 // Resolve chooses the current ingestor for an input path.
@@ -47,21 +43,18 @@ func (s Selector) Resolve(path string, useFixture bool) (core.Ingestor, error) {
 		}
 		return s.SemanticFixture, nil
 	case strings.EqualFold(filepath.Ext(path), ".pdf"):
-		return pdfruntime.New(s.NativePDF, s.PDFBridge), nil
+		if s.NativePDF == nil {
+			return nil, fmt.Errorf("native pdf ingestor is not configured")
+		}
+		return s.NativePDF, nil
 	default:
 		return nil, fmt.Errorf("unsupported input type for %q", path)
 	}
 }
 
-// TemporaryPDFBridge returns the current bridge implementation for real `.pdf`
-// inputs. This must be replaced by a real native parser backend.
-func TemporaryPDFBridge() core.Ingestor {
-	return pdfbridge.New()
-}
-
 func defaultNativePDFIngestor() core.Ingestor {
 	switch strings.TrimSpace(strings.ToLower(os.Getenv("OPENDATALOADER_GO_PDF_BACKEND"))) {
-	case "native-skeleton":
+	case "", "native-skeleton":
 		return nativepdf.NewIngestor(nativepdf.NewSkeletonLoader())
 	default:
 		return nativepdf.NewIngestor(nativepdf.NewUnavailableLoader())

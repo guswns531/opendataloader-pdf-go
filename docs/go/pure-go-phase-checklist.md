@@ -66,10 +66,10 @@
 
 ### Phase 5: Native Pure-Go Ingestion
 
-- [ ] Remove `ledongthuc/pdf` from the runtime path.
-- [ ] Design a native ingestion API for page geometry, raw text/image/line artifacts, style, page metadata, and optional struct-tree hooks.
-- [ ] Implement a first native ingestion backend that feeds stable raw artifacts into the existing Go pipeline.
-- [ ] Add raw-artifact fixture dumps for debugging native ingestion regressions.
+- [x] Remove `ledongthuc/pdf` from the runtime path.
+- [x] Design a native ingestion API for page geometry, raw text/image/line artifacts, style, page metadata, and optional struct-tree hooks.
+- [x] Implement a first native ingestion backend that feeds stable raw artifacts into the existing Go pipeline.
+- [x] Add raw-artifact fixture dumps for debugging native ingestion regressions.
 
 ### Phase 6: Table and Raw-Artifact Subsystem
 
@@ -105,7 +105,8 @@
 - [x] Phase 2 complete
 - [x] Phase 3 complete
 - [x] Phase 4 complete
-- [ ] Phase 5 active
+- [x] Phase 5 complete
+- [ ] Phase 6 active
 
 ## Commit Policy
 
@@ -144,3 +145,5 @@
 - [x] `phase-3: add style-rarity heading cues and keep full heuristic regression green`
 - [x] `phase-4: pin list continuation attachment to the previous list item`
 - [x] `phase-4: pin semantic fixture reconstruction for heading and list output`
+- [x] `phase-5: remove ledongthuc/pdf and promote native pdf runtime by default`
+- [x] `phase-5: add raw artifact dump/debug path for native ingestion`

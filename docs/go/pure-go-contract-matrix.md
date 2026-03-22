@@ -9,7 +9,8 @@ This document freezes the compatibility surface for the Pure Go local-core migra
 - Phase 2 CLI/emitter parity on fixtures: complete
 - Phase 3 deterministic heuristics: complete
 - Phase 4 semantic processors: complete
-- Current active focus: Phase 5 native pure-Go ingestion
+- Phase 5 native pure-Go ingestion: complete
+- Current active focus: Phase 6 tables and raw-artifact subsystem
 
 ## MVP Contract Sources
 
@@ -95,7 +96,7 @@ These areas are already worth keeping:
 - Go-native document graph and IDs
 - processing context and option resolution
 - CLI discovery and page-range parsing
-- runtime selector lives outside `cmd`; native PDF backend is preferred for `.raw.json`, semantic fixture loader handles `.json`, and `.pdf` falls back to the temporary pdftext bridge
+- runtime selector lives outside `cmd`; native PDF backend is preferred for `.raw.json`, semantic fixture loader handles `.json`, and `.pdf` now uses the native backend by default
 - fixture ingestion path for downstream algorithm tests
 - fixture-backed native loader for raw-artifact goldens
 - JSON / Markdown / HTML / text emitters as scaffolding

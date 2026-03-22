@@ -43,7 +43,14 @@ func (i *Ingestor) Ingest(ctx *core.ProcessingContext, source core.Source) (*cor
 	}
 	defer handle.Close()
 
-	return BuildDocumentFromHandle(handle, source)
+	document, err := BuildDocumentFromHandle(handle, source)
+	if err != nil {
+		return nil, err
+	}
+	if err := writeRawDumpIfRequested(document); err != nil {
+		return nil, err
+	}
+	return document, nil
 }
 
 // BuildDocumentFromHandle converts a native document handle into the current
