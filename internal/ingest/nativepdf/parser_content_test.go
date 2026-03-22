@@ -34,3 +34,31 @@ func TestExtractContentTextByOperatorsHandlesQuoteOperator(t *testing.T) {
 		t.Fatalf("extractContentTextByOperators() = %v, want %v", got, want)
 	}
 }
+
+func TestContentTokenizerReadsMarkedContentPropertyDict(t *testing.T) {
+	tokenizer := newContentTokenizer([]byte("/P << /MCID 7 >> BDC"))
+
+	tag, ok := tokenizer.next()
+	if !ok {
+		t.Fatal("first token missing")
+	}
+	if got, want := tag.text, "P"; got != want {
+		t.Fatalf("tag = %q, want %q", got, want)
+	}
+
+	properties, ok := tokenizer.next()
+	if !ok {
+		t.Fatal("property dict token missing")
+	}
+	if got := markedContentIDFromToken(properties); got == nil || *got != 7 {
+		t.Fatalf("markedContentIDFromToken() = %#v, want 7", got)
+	}
+
+	op, ok := tokenizer.next()
+	if !ok {
+		t.Fatal("operator token missing")
+	}
+	if got, want := op.text, "BDC"; got != want {
+		t.Fatalf("operator = %q, want %q", got, want)
+	}
+}

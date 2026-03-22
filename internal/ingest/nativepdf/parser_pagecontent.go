@@ -103,13 +103,14 @@ func extractPositionedTextArtifactsFromStreams(streams [][]byte, page model.Page
 			bounds = shellBoundsForText(page, i, text)
 		}
 		artifacts = append(artifacts, &model.RawArtifact{
-			ID:         model.ArtifactID(i + 1),
-			Kind:       model.ArtifactKindText,
-			PageIndex:  page.Index,
-			PageNumber: page.Number,
-			Sequence:   i,
-			Bounds:     bounds,
-			Text:       text,
+			ID:              model.ArtifactID(i + 1),
+			Kind:            model.ArtifactKindText,
+			PageIndex:       page.Index,
+			PageNumber:      page.Number,
+			MarkedContentID: cloneIntPointer(fragment.markedContentID),
+			Sequence:        i,
+			Bounds:          bounds,
+			Text:            text,
 			Style: model.TextProperties{
 				Font:     fragment.fontName,
 				FontSize: fragment.fontSize,

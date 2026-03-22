@@ -169,6 +169,40 @@ endobj
 	}
 }
 
+func TestGraphicsExtractionTracksMarkedContentID(t *testing.T) {
+	const pdf = `%PDF-1.7
+1 0 obj << /Type /Page /MediaBox [0 0 200 200] >> endobj
+2 0 obj << /Length 46 >> stream
+/Figure << /MCID 9 >> BDC
+10 20 m 30 20 l S
+EMC
+endstream
+`
+
+	loader := NewSkeletonLoader()
+	handle, err := loader.OpenReader(nil, "graphics-mcid.pdf", strings.NewReader(pdf), OpenOptions{})
+	if err != nil {
+		t.Fatalf("OpenReader() error = %v", err)
+	}
+	defer handle.Close()
+
+	page, err := handle.Page(0)
+	if err != nil {
+		t.Fatalf("handle.Page(0) error = %v", err)
+	}
+
+	artifacts, err := page.Artifacts(nil, ArtifactOptions{IncludeLine: true})
+	if err != nil {
+		t.Fatalf("page.Artifacts() error = %v", err)
+	}
+	if got, want := len(artifacts), 1; got != want {
+		t.Fatalf("len(artifacts) = %d, want %d", got, want)
+	}
+	if artifacts[0].MarkedContentID == nil || *artifacts[0].MarkedContentID != 9 {
+		t.Fatalf("artifacts[0].MarkedContentID = %#v, want 9", artifacts[0].MarkedContentID)
+	}
+}
+
 func TestGraphicsExtractionEmitsCurvePathArtifact(t *testing.T) {
 	const pdf = `%PDF-1.7
 1 0 obj << /Type /Page /MediaBox [0 0 200 200] >> endobj

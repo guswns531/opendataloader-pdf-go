@@ -53,6 +53,21 @@ func TestExtractTextFragmentsFromStreamAppliesGraphicsMatrixToTmCoordinates(t *t
 	}
 }
 
+func TestExtractTextFragmentsFromStreamTracksMarkedContentID(t *testing.T) {
+	stream := []byte("BT /F1 12 Tf /P << /MCID 7 >> BDC 10 20 Td (Hello) Tj EMC /Artifact BMC 0 -14 Td (World) Tj EMC ET")
+
+	fragments := extractTextFragmentsFromStream(stream, nil)
+	if got, want := len(fragments), 2; got != want {
+		t.Fatalf("len(fragments) = %d, want %d", got, want)
+	}
+	if fragments[0].markedContentID == nil || *fragments[0].markedContentID != 7 {
+		t.Fatalf("fragments[0].markedContentID = %#v, want 7", fragments[0].markedContentID)
+	}
+	if fragments[1].markedContentID != nil {
+		t.Fatalf("fragments[1].markedContentID = %#v, want nil", fragments[1].markedContentID)
+	}
+}
+
 func TestSkeletonLoaderUsesPositionedTextArtifactsForSimpleDigitalPDF(t *testing.T) {
 	const pdf = `%PDF-1.7
 1 0 obj << /Type /Page /MediaBox [0 0 612 792] >> endobj
