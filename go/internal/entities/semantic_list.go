@@ -22,4 +22,4 @@ type PDFList struct {
 }
 
 func (l *PDFList) GetObjectType() ObjectType  { return ObjectTypeList }
-func (i *ListItem) GetObjectType() ObjectType { return "list_item" }
+func (i *ListItem) GetObjectType() ObjectType { return ObjectTypeListItem }

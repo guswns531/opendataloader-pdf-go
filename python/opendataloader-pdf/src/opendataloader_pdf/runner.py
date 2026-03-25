@@ -1,63 +1,72 @@
 """
-Low-level JAR runner for opendataloader-pdf.
+Low-level binary runner for opendataloader-pdf.
 """
+import os
 import locale
+import platform
+import shutil
 import subprocess
 import sys
-import importlib.resources as resources
 from typing import List
 
-# The consistent name of the JAR file bundled with the package
-_JAR_NAME = "opendataloader-pdf-cli.jar"
+
+def _get_binary_path() -> str:
+    system = platform.system()
+    binary_name = "opendataloader-pdf.exe" if system == "Windows" else "opendataloader-pdf"
+
+    env_path = os.environ.get("OPENDATALOADER_PDF_BIN")
+    if env_path and os.path.isfile(env_path):
+        return env_path
+
+    package_bin = os.path.join(os.path.dirname(__file__), "bin", binary_name)
+    if os.path.isfile(package_bin):
+        return package_bin
+
+    path_binary = shutil.which("opendataloader-pdf")
+    if path_binary:
+        return path_binary
+
+    raise RuntimeError(
+        "opendataloader-pdf binary not found. "
+        "Set OPENDATALOADER_PDF_BIN environment variable or install the Go binary."
+    )
 
 
 def run_jar(args: List[str], quiet: bool = False) -> str:
-    """Run the opendataloader-pdf JAR with the given arguments."""
+    """Run the opendataloader-pdf binary with the given arguments."""
     try:
-        # Access the embedded JAR inside the package
-        jar_ref = resources.files("opendataloader_pdf").joinpath("jar", _JAR_NAME)
-        with resources.as_file(jar_ref) as jar_path:
-            command = ["java", "-jar", str(jar_path), *args]
+        command = [_get_binary_path(), *args]
 
-            if quiet:
-                # Quiet mode → capture all output
-                result = subprocess.run(
-                    command,
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                    encoding=locale.getpreferredencoding(False),
-                )
-                return result.stdout
-
-            # Streaming mode → live output
-            with subprocess.Popen(
+        if quiet:
+            result = subprocess.run(
                 command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                capture_output=True,
                 text=True,
+                check=True,
                 encoding=locale.getpreferredencoding(False),
-            ) as process:
-                output_lines: List[str] = []
-                for line in process.stdout:
-                    sys.stdout.write(line)
-                    output_lines.append(line)
+            )
+            return result.stdout
 
-                return_code = process.wait()
-                captured_output = "".join(output_lines)
+        with subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding=locale.getpreferredencoding(False),
+        ) as process:
+            output_lines: List[str] = []
+            for line in process.stdout:
+                sys.stdout.write(line)
+                output_lines.append(line)
 
-                if return_code:
-                    raise subprocess.CalledProcessError(
-                        return_code, command, output=captured_output
-                    )
-                return captured_output
+            return_code = process.wait()
+            captured_output = "".join(output_lines)
 
-    except FileNotFoundError:
-        print(
-            "Error: 'java' command not found. Please ensure Java is installed and in your system's PATH.",
-            file=sys.stderr,
-        )
-        raise
+            if return_code:
+                raise subprocess.CalledProcessError(
+                    return_code, command, output=captured_output
+                )
+            return captured_output
 
     except subprocess.CalledProcessError as error:
         print("Error running opendataloader-pdf CLI.", file=sys.stderr)

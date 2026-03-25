@@ -9,6 +9,8 @@ const (
 	ReadingOrderOff   = "off"
 	ReadingOrderXYCut = "xycut"
 
+	PageNumberString = "%page-number%"
+
 	HybridModeAuto = "auto"
 	HybridModeFull = "full"
 

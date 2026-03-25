@@ -69,7 +69,13 @@ def process_markdown(
     total_elapsed = end_time - start_time
 
     elapsed_per_doc = total_elapsed / document_count if document_count > 0 else 0
-    processor = cpuinfo.get_cpu_info()["brand_raw"]
+    cpu_details = cpuinfo.get_cpu_info()
+    processor = (
+        cpu_details.get("brand_raw")
+        or cpu_details.get("brand")
+        or cpu_details.get("hz_advertised_friendly")
+        or "unknown"
+    )
     summary_data = {
         "engine_name": engine_name,
         "engine_version": engine_version,

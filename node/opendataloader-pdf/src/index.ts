@@ -12,33 +12,39 @@ import { buildArgs } from './convert-options.generated.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const JAR_NAME = 'opendataloader-pdf-cli.jar';
-
-interface JarExecutionOptions {
+interface BinaryExecutionOptions {
   streamOutput?: boolean;
 }
 
-function executeJar(args: string[], executionOptions: JarExecutionOptions = {}): Promise<string> {
+function getBinaryPath(): string {
+  const platform = process.platform;
+  const binaryName = platform === 'win32' ? 'opendataloader-pdf.exe' : 'opendataloader-pdf';
+
+  const envPath = process.env['OPENDATALOADER_PDF_BIN'];
+  if (envPath && fs.existsSync(envPath)) return envPath;
+
+  const packageBin = path.join(__dirname, '..', 'bin', binaryName);
+  if (fs.existsSync(packageBin)) return packageBin;
+
+  throw new Error(
+    'opendataloader-pdf binary not found. ' +
+      'Set OPENDATALOADER_PDF_BIN environment variable or install the Go binary.',
+  );
+}
+
+function executeBinary(
+  args: string[],
+  executionOptions: BinaryExecutionOptions = {},
+): Promise<string> {
   const { streamOutput = false } = executionOptions;
 
   return new Promise((resolve, reject) => {
-    const jarPath = path.join(__dirname, '..', 'lib', JAR_NAME);
-
-    if (!fs.existsSync(jarPath)) {
-      return reject(
-        new Error(`JAR file not found at ${jarPath}. Please run the build script first.`),
-      );
-    }
-
-    const command = 'java';
-    const commandArgs = ['-jar', jarPath, ...args];
-
-    const javaProcess = spawn(command, commandArgs);
+    const binaryProcess = spawn(getBinaryPath(), args);
 
     let stdout = '';
     let stderr = '';
 
-    javaProcess.stdout.on('data', (data) => {
+    binaryProcess.stdout.on('data', (data) => {
       const chunk = data.toString();
       if (streamOutput) {
         process.stdout.write(chunk);
@@ -46,7 +52,7 @@ function executeJar(args: string[], executionOptions: JarExecutionOptions = {}):
       stdout += chunk;
     });
 
-    javaProcess.stderr.on('data', (data) => {
+    binaryProcess.stderr.on('data', (data) => {
       const chunk = data.toString();
       if (streamOutput) {
         process.stderr.write(chunk);
@@ -54,7 +60,7 @@ function executeJar(args: string[], executionOptions: JarExecutionOptions = {}):
       stderr += chunk;
     });
 
-    javaProcess.on('close', (code) => {
+    binaryProcess.on('close', (code) => {
       if (code === 0) {
         resolve(stdout);
       } else {
@@ -66,17 +72,7 @@ function executeJar(args: string[], executionOptions: JarExecutionOptions = {}):
       }
     });
 
-    javaProcess.on('error', (err: Error) => {
-      if (err.message.includes('ENOENT')) {
-        reject(
-          new Error(
-            "'java' command not found. Please ensure Java is installed and in your system's PATH.",
-          ),
-        );
-      } else {
-        reject(err);
-      }
-    });
+    binaryProcess.on('error', reject);
   });
 }
 
@@ -97,7 +93,7 @@ export function convert(
 
   const args: string[] = [...inputList, ...buildArgs(options)];
 
-  return executeJar(args, {
+  return executeBinary(args, {
     streamOutput: !options.quiet,
   });
 }

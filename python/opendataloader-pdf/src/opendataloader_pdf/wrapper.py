@@ -51,7 +51,7 @@ def run(
         use_struct_tree: If True, enable processing structure tree (disabled by default)
 
     Raises:
-        FileNotFoundError: If the 'java' command is not found or input_path is invalid.
+        FileNotFoundError: If input_path is invalid.
         subprocess.CalledProcessError: If the CLI tool returns a non-zero exit code.
     """
     warnings.warn(
@@ -92,7 +92,7 @@ def run(
 def main(argv=None) -> int:
     """CLI entry point for running the wrapper from the command line."""
     parser = argparse.ArgumentParser(
-        description="Run the opendataloader-pdf CLI using the bundled JAR."
+        description="Run the opendataloader-pdf CLI using the bundled binary."
     )
     parser.add_argument(
         "input_path", nargs="+", help="Path to the input PDF file or directory."

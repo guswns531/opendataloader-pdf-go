@@ -16,14 +16,17 @@ type BoundingBox struct {
 type ObjectType string
 
 const (
+	ObjectTypeUnknown      ObjectType = "unknown"
 	ObjectTypeParagraph    ObjectType = "paragraph"
 	ObjectTypeHeading      ObjectType = "heading"
 	ObjectTypeTable        ObjectType = "table"
 	ObjectTypeList         ObjectType = "list"
+	ObjectTypeListItem     ObjectType = "list_item"
 	ObjectTypeImage        ObjectType = "image"
 	ObjectTypeFormula      ObjectType = "formula"
 	ObjectTypeCaption      ObjectType = "caption"
 	ObjectTypeHeaderFooter ObjectType = "header_footer"
+	ObjectTypeLineArt      ObjectType = "line_art"
 	ObjectTypeTextLine     ObjectType = "text_line"
 	ObjectTypeTextChunk    ObjectType = "text_chunk"
 )
@@ -41,3 +44,6 @@ type BaseObject struct {
 
 func (b *BaseObject) GetID() string        { return b.ID }
 func (b *BaseObject) GetBBox() BoundingBox { return b.BBox }
+func (b *BaseObject) GetObjectType() ObjectType {
+	return ObjectTypeUnknown
+}

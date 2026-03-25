@@ -8,11 +8,12 @@
 package entities
 
 type FontStyle struct {
-	FontName string
-	FontSize float64
-	Bold     bool
-	Italic   bool
-	Color    [3]float64
+	FontName   string
+	FontSize   float64
+	FontWeight float64
+	Bold       bool
+	Italic     bool
+	Color      [3]float64
 }
 
 type TextChunk struct {
@@ -22,6 +23,7 @@ type TextChunk struct {
 	Baseline        float64
 	CharSpacing     float64
 	IsHidden        bool
+	IsHiddenOCG     bool
 	IsOffPage       bool
 	IsTiny          bool
 	IsStrikethrough bool
@@ -36,4 +38,4 @@ type LineArtChunk struct {
 	LineWidth    float64
 }
 
-func (c *LineArtChunk) GetObjectType() ObjectType { return "line_art" }
+func (c *LineArtChunk) GetObjectType() ObjectType { return ObjectTypeLineArt }

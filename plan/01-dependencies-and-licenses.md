@@ -6,7 +6,8 @@
 
 | Java 라이브러리 | 버전 | 라이센스 | Go 대체재 | Go 라이센스 | 비고 |
 |----------------|------|----------|-----------|------------|------|
-| **Apache PDFBox** | 3.0.4 | Apache-2.0 | [pdfcpu](https://github.com/pdfcpu/pdfcpu) v0.9+ | Apache-2.0 | PDF 파싱, 렌더링 |
+| **Apache PDFBox** | 3.0.4 | Apache-2.0 | 직접 포팅 → `pkg/pdfbox/` (pdfcpu 기반) | **Apache-2.0** | PDF 파싱·주석·OCG, 하위 엔진은 pdfcpu v0.9 |
+| **pdfcpu** | v0.9.0 | Apache-2.0 | [pdfcpu](https://github.com/pdfcpu/pdfcpu) | Apache-2.0 | pkg/pdfbox/ 내부 엔진 |
 | **veraPDF validation-model** | 1.31.0 | MPL-2.0 | 직접 포팅 → `pkg/verapdf/` | **MPL-2.0** | PDF/A 검증 모델 |
 | **veraPDF wcag-validation** | 1.31.0 | MPL-2.0 | 직접 포팅 → `pkg/verapdf/wcag/` | **MPL-2.0** | 접근성 검증 |
 | **veraPDF pdfbox-validation** | 1.31.0 | MPL-2.0 | 직접 포팅 → `pkg/verapdf/pdfbox/` | **MPL-2.0** | PDFBox 통합 레이어 |
@@ -119,7 +120,7 @@ Go 포팅 후 `THIRD_PARTY/THIRD_PARTY_LICENSES.md` 파일에 아래 항목 추�
 
 ---
 
-## go.mod 초기 설정
+## go.mod 현재 상태 (go mod tidy 완료)
 
 ```go
 module github.com/opendataloader-project/opendataloader-pdf-go
@@ -127,10 +128,16 @@ module github.com/opendataloader-project/opendataloader-pdf-go
 go 1.22
 
 require (
+    github.com/goccy/go-json v0.10.3
     github.com/pdfcpu/pdfcpu v0.9.0
     github.com/spf13/cobra v1.8.1
     github.com/spf13/pflag v1.0.5
     github.com/stretchr/testify v1.9.0
-    github.com/goccy/go-json v0.10.3
 )
+
+// indirect: davecgh/go-spew, hhrutter/lzw, hhrutter/tiff,
+//           inconshreveable/mousetrap, mattn/go-runewidth,
+//           pkg/errors, pmezard/go-difflib, rivo/uniseg,
+//           golang.org/x/image, golang.org/x/text,
+//           gopkg.in/yaml.v2, gopkg.in/yaml.v3
 ```

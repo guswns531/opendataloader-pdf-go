@@ -321,3 +321,65 @@ Hancom, Inc. distributes the veraPDF components under the Mozilla Public License
 | yocto-queue | 0.1.0 | MIT | https://github.com/sindresorhus/yocto-queue |
 | zstandard | 0.23.0 | BSD-3-Clause | https://github.com/indygreg/python-zstandard |
 
+---
+
+## Go Dependencies
+
+The following Go modules are used by the Go implementation of opendataloader-pdf.
+
+### Apache-2.0 License
+
+| Component | Version | License | URL |
+|-----------|---------|---------|-----|
+| pdfcpu | v0.9.0 | Apache-2.0 | https://github.com/pdfcpu/pdfcpu |
+| cobra | v1.8.1 | Apache-2.0 | https://github.com/spf13/cobra |
+
+### MIT License
+
+| Component | Version | License | URL |
+|-----------|---------|---------|-----|
+| go-json | v0.10.3 | MIT | https://github.com/goccy/go-json |
+| testify | v1.9.0 | MIT | https://github.com/stretchr/testify |
+
+### BSD-3-Clause License
+
+| Component | Version | License | URL |
+|-----------|---------|---------|-----|
+| pflag | v1.0.5 | BSD-3-Clause | https://github.com/spf13/pflag |
+
+### Indirect Dependencies (Apache-2.0)
+
+| Component | License | URL |
+|-----------|---------|-----|
+| mousetrap | Apache-2.0 | https://github.com/inconshreveable/mousetrap |
+| hhrutter/tiff | Apache-2.0 | https://github.com/hhrutter/tiff |
+| hhrutter/lzw | Apache-2.0 | https://github.com/hhrutter/lzw |
+| golang.org/x/image | BSD-3-Clause | https://pkg.go.dev/golang.org/x/image |
+| golang.org/x/text | BSD-3-Clause | https://pkg.go.dev/golang.org/x/text |
+| go-runewidth | MIT | https://github.com/mattn/go-runewidth |
+| uniseg | MIT | https://github.com/rivo/uniseg |
+| pkg/errors | BSD-2-Clause | https://github.com/pkg/errors |
+
+---
+
+## Components Ported under Mozilla Public License 2.0 (MPL-2.0)
+
+The following components were ported from veraPDF and are distributed under
+Mozilla Public License 2.0. Source files are located in `go/pkg/verapdf/`.
+
+See `go/pkg/verapdf/LICENSE_MPL2` for the full license text.
+
+| Original Component | Version | Original URL |
+|-------------------|---------|-------------|
+| veraPDF validation-model | 1.31.0 | https://github.com/veraPDF/veraPDF-library |
+| veraPDF wcag-validation | 1.31.0 | https://github.com/veraPDF/veraPDF-wcag-algs |
+| veraPDF pdfbox-validation | 1.31.0 | https://github.com/veraPDF/veraPDF-pdfbox-validation |
+
+## PDFBox Equivalent Implementation
+
+The go/pkg/pdfbox/ package provides functionality equivalent to Apache PDFBox 3.0.4
+and is implemented using pdfcpu. Licensed under Apache-2.0.
+
+| Original Library | Version | License | URL |
+|-----------------|---------|---------|-----|
+| Apache PDFBox | 3.0.4 | Apache-2.0 | https://pdfbox.apache.org/ |

@@ -1,44 +1,40 @@
-"""PDF parser using local opendataloader-pdf build."""
+"""PDF parser using local opendataloader-pdf build (Go binary)."""
 
 import subprocess
 import sys
 from pathlib import Path
 
 
-def _find_local_jar() -> Path:
-    """Find the locally built JAR file."""
-    # Navigate from tests/benchmark/src to project root
+def _find_local_binary() -> Path:
+    """Find the locally built Go binary.
+
+    project_root resolves to the tripoli/ directory.
+    """
+    # tests/benchmark/src -> tests/benchmark -> tests -> tripoli
     project_root = Path(__file__).parent.parent.parent.parent.resolve()
 
-    # Look for JAR in java/opendataloader-pdf-cli/target
-    cli_target = project_root / "java" / "opendataloader-pdf-cli" / "target"
+    # Primary: bin/opendataloader-pdf (built by `make build`)
+    binary = project_root / "bin" / "opendataloader-pdf"
+    if binary.exists():
+        return binary
 
-    # Find the shaded JAR (avoid *-sources.jar, *-javadoc.jar)
-    jar_pattern = "opendataloader-pdf-cli-*-shaded.jar"
-    jars = list(cli_target.glob(jar_pattern))
+    # Fallback: built directly in go/
+    binary2 = project_root / "go" / "opendataloader-pdf"
+    if binary2.exists():
+        return binary2
 
-    if not jars:
-        # Try non-shaded JAR as fallback
-        jar_pattern = "opendataloader-pdf-cli-*.jar"
-        jars = [j for j in cli_target.glob(jar_pattern)
-                if "-sources" not in j.name and "-javadoc" not in j.name]
-
-    if not jars:
-        raise FileNotFoundError(
-            f"No JAR found in {cli_target}. Run ./scripts/build-java.sh first."
-        )
-
-    # Return the most recently modified JAR
-    return max(jars, key=lambda p: p.stat().st_mtime)
+    raise FileNotFoundError(
+        f"Go binary not found at {binary}. "
+        "Run `cd go && go build -o ../bin/opendataloader-pdf ./cmd/opendataloader-pdf/` first."
+    )
 
 
 def to_markdown(_, input_path, output_dir):
-    """Convert PDF to Markdown using local JAR build."""
-    jar_path = _find_local_jar()
+    """Convert PDF to Markdown using local Go binary."""
+    binary_path = _find_local_binary()
 
-    # Build command
     command = [
-        "java", "-jar", str(jar_path),
+        str(binary_path),
         str(input_path),
         "--output-dir", str(output_dir),
         "--format", "markdown",
@@ -47,7 +43,6 @@ def to_markdown(_, input_path, output_dir):
         "--quiet",
     ]
 
-    # Run conversion
     result = subprocess.run(
         command,
         capture_output=True,
