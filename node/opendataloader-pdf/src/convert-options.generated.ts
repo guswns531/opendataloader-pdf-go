@@ -52,7 +52,7 @@ export interface ConvertOptions {
   /** Hybrid backend server URL (overrides default) */
   hybridUrl?: string;
   /** Hybrid backend request timeout in milliseconds. Default: 30000 */
-  hybridTimeout?: string;
+  hybridTimeout?: number;
   /** Opt in to Java fallback on hybrid backend error (default: disabled) */
   hybridFallback?: boolean;
 }
@@ -84,7 +84,7 @@ export interface CliOptions {
   hybrid?: string;
   hybridMode?: string;
   hybridUrl?: string;
-  hybridTimeout?: string;
+  hybridTimeout?: number | string;
   hybridFallback?: boolean;
 }
 
@@ -180,10 +180,10 @@ export function buildArgs(options: ConvertOptions): string[] {
   const args: string[] = [];
 
   if (options.outputDir) {
-    args.push('--output-dir', options.outputDir);
+    args.push('--output-dir', String(options.outputDir));
   }
   if (options.password) {
-    args.push('--password', options.password);
+    args.push('--password', String(options.password));
   }
   if (options.format) {
     if (Array.isArray(options.format)) {
@@ -213,37 +213,37 @@ export function buildArgs(options: ConvertOptions): string[] {
     args.push('--keep-line-breaks');
   }
   if (options.replaceInvalidChars) {
-    args.push('--replace-invalid-chars', options.replaceInvalidChars);
+    args.push('--replace-invalid-chars', String(options.replaceInvalidChars));
   }
   if (options.useStructTree) {
     args.push('--use-struct-tree');
   }
   if (options.tableMethod) {
-    args.push('--table-method', options.tableMethod);
+    args.push('--table-method', String(options.tableMethod));
   }
   if (options.readingOrder) {
-    args.push('--reading-order', options.readingOrder);
+    args.push('--reading-order', String(options.readingOrder));
   }
   if (options.markdownPageSeparator) {
-    args.push('--markdown-page-separator', options.markdownPageSeparator);
+    args.push('--markdown-page-separator', String(options.markdownPageSeparator));
   }
   if (options.textPageSeparator) {
-    args.push('--text-page-separator', options.textPageSeparator);
+    args.push('--text-page-separator', String(options.textPageSeparator));
   }
   if (options.htmlPageSeparator) {
-    args.push('--html-page-separator', options.htmlPageSeparator);
+    args.push('--html-page-separator', String(options.htmlPageSeparator));
   }
   if (options.imageOutput) {
-    args.push('--image-output', options.imageOutput);
+    args.push('--image-output', String(options.imageOutput));
   }
   if (options.imageFormat) {
-    args.push('--image-format', options.imageFormat);
+    args.push('--image-format', String(options.imageFormat));
   }
   if (options.imageDir) {
-    args.push('--image-dir', options.imageDir);
+    args.push('--image-dir', String(options.imageDir));
   }
   if (options.pages) {
-    args.push('--pages', options.pages);
+    args.push('--pages', String(options.pages));
   }
   if (options.includeHeaderFooter) {
     args.push('--include-header-footer');
@@ -252,16 +252,16 @@ export function buildArgs(options: ConvertOptions): string[] {
     args.push('--detect-strikethrough');
   }
   if (options.hybrid) {
-    args.push('--hybrid', options.hybrid);
+    args.push('--hybrid', String(options.hybrid));
   }
   if (options.hybridMode) {
-    args.push('--hybrid-mode', options.hybridMode);
+    args.push('--hybrid-mode', String(options.hybridMode));
   }
   if (options.hybridUrl) {
-    args.push('--hybrid-url', options.hybridUrl);
+    args.push('--hybrid-url', String(options.hybridUrl));
   }
   if (options.hybridTimeout) {
-    args.push('--hybrid-timeout', options.hybridTimeout);
+    args.push('--hybrid-timeout', String(options.hybridTimeout));
   }
   if (options.hybridFallback) {
     args.push('--hybrid-fallback');

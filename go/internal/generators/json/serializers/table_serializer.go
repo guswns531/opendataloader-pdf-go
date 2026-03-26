@@ -24,11 +24,11 @@ func SerializeTable(t *entities.SemanticTable) map[string]interface{} {
 	out := essentialInfo(t, "table")
 	out[jsonNumberOfRows] = len(t.Rows)
 	out[jsonNumberOfColumns] = maxColumns(t.Rows)
-	if t.PrevTableID != "" {
-		out[jsonPreviousTableID] = t.PrevTableID
+	if prevID, ok := numericID(t.PrevTableID); ok {
+		out[jsonPreviousTableID] = prevID
 	}
-	if t.NextTableID != "" {
-		out[jsonNextTableID] = t.NextTableID
+	if nextID, ok := numericID(t.NextTableID); ok {
+		out[jsonNextTableID] = nextID
 	}
 
 	rows := make([]interface{}, 0, len(t.Rows))
@@ -36,13 +36,13 @@ func SerializeTable(t *entities.SemanticTable) map[string]interface{} {
 		if row == nil {
 			continue
 		}
-		rows = append(rows, serializeTableRow(row, rowIndex))
+		rows = append(rows, serializeTableRowData(row, rowIndex))
 	}
 	out[jsonRows] = rows
 	return out
 }
 
-func serializeTableRow(row *entities.TableRow, rowIndex int) map[string]interface{} {
+func serializeTableRowData(row *entities.TableRow, rowIndex int) map[string]interface{} {
 	out := map[string]interface{}{
 		jsonType:      "table row",
 		jsonRowNumber: rowIndex + 1,
@@ -52,26 +52,18 @@ func serializeTableRow(row *entities.TableRow, rowIndex int) map[string]interfac
 		if cell == nil {
 			continue
 		}
-		cells = append(cells, serializeTableCell(cell, rowIndex, colIndex))
+		cells = append(cells, serializeTableCellData(cell, rowIndex, colIndex))
 	}
 	out[jsonCells] = cells
 	return out
 }
 
-func serializeTableCell(cell *entities.TableCell, rowIndex, colIndex int) map[string]interface{} {
-	out := map[string]interface{}{
-		jsonType:         "table cell",
-		jsonRowNumber:    rowIndex + 1,
-		jsonColumnNumber: colIndex + 1,
-		jsonRowSpan:      defaultSpan(cell.Rowspan),
-		jsonColumnSpan:   defaultSpan(cell.Colspan),
-		jsonBoundingBox: map[string]interface{}{
-			"left":   serializeDouble(cell.BBox.X),
-			"bottom": serializeDouble(cell.BBox.Y),
-			"right":  serializeDouble(cell.BBox.X + cell.BBox.Width),
-			"top":    serializeDouble(cell.BBox.Y + cell.BBox.Height),
-		},
-	}
+func serializeTableCellData(cell *entities.TableCell, rowIndex, colIndex int) map[string]interface{} {
+	out := essentialInfo(&entities.BaseObject{BBox: cell.BBox}, "table cell")
+	out[jsonRowNumber] = rowIndex + 1
+	out[jsonColumnNumber] = colIndex + 1
+	out[jsonRowSpan] = defaultSpan(cell.Rowspan)
+	out[jsonColumnSpan] = defaultSpan(cell.Colspan)
 	out[jsonKids] = serializeElements(cell.Content)
 	return out
 }

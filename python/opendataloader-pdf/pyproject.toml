@@ -1,7 +1,7 @@
 [project]
 name = "opendataloader-pdf"
 version = "0.0.0"
-description = "A Python wrapper for the opendataloader-pdf Java CLI."
+description = "A Python wrapper for the opendataloader-pdf Go binary."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -36,7 +36,7 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/opendataloader_pdf"]
 artifacts = [
-    "src/opendataloader_pdf/jar/*.jar",
+    "src/opendataloader_pdf/bin/*",
     "src/opendataloader_pdf/LICENSE",
     "src/opendataloader_pdf/NOTICE",
     "src/opendataloader_pdf/THIRD_PARTY/**",

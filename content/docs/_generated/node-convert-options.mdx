@@ -11,7 +11,7 @@ description: Options for the Node.js convert function
 |-------------------------|----------------------|--------------|------------------------------------------------------------------------------------------------------------------------------------|
 | `outputDir`             | `string`             | -            | Directory where output files are written. Default: input file directory                                                            |
 | `password`              | `string`             | -            | Password for encrypted PDF files                                                                                                   |
-| `format`                | `string \| string[]` | -            | Output formats (comma-separated). Values: json, text, html, pdf, markdown, markdown-with-html, markdown-with-images. Default: json |
+| `format`                | `string \| string[]` | `json`       | Output formats (comma-separated). Values: json, text, html, pdf, markdown, markdown-with-html, markdown-with-images. Default: json |
 | `quiet`                 | `boolean`            | `false`      | Suppress console logging output                                                                                                    |
 | `contentSafetyOff`      | `string \| string[]` | -            | Disable content safety filters. Values: all, hidden-text, off-page, tiny, hidden-ocg                                               |
 | `sanitize`              | `boolean`            | `false`      | Enable sensitive data sanitization. Replaces emails, phone numbers, IPs, credit cards, and URLs with placeholders                  |
@@ -32,5 +32,5 @@ description: Options for the Node.js convert function
 | `hybrid`                | `string`             | `"off"`      | Hybrid backend for AI processing. Values: off (default), docling-fast                                                              |
 | `hybridMode`            | `string`             | `"auto"`     | Hybrid triage mode. Values: auto (default, dynamic triage), full (skip triage, all pages to backend)                               |
 | `hybridUrl`             | `string`             | -            | Hybrid backend server URL (overrides default)                                                                                      |
-| `hybridTimeout`         | `string`             | `"30000"`    | Hybrid backend request timeout in milliseconds. Default: 30000                                                                     |
+| `hybridTimeout`         | `number`             | `30000`      | Hybrid backend request timeout in milliseconds. Default: 30000                                                                     |
 | `hybridFallback`        | `boolean`            | `false`      | Opt in to Java fallback on hybrid backend error (default: disabled)                                                                |

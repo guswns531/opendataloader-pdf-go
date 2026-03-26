@@ -56,7 +56,7 @@ func (g *MarkdownGenerator) Generate(doc *entities.Document) (string, error) {
 }
 
 func (g *MarkdownGenerator) writePageSeparator(b *strings.Builder, pageIndex int) error {
-	if g.config.MarkdownPageSeparator == "" {
+	if g.config.MarkdownPageSeparator == "" || pageIndex <= 0 {
 		return nil
 	}
 

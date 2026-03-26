@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/api"
@@ -61,19 +62,25 @@ const (
 func essentialInfo(object entities.IObject, objectType string) map[string]interface{} {
 	bbox := object.GetBBox()
 	out := map[string]interface{}{
-		jsonType:       objectType,
-		jsonPageNumber: bbox.Page + 1,
-		jsonBoundingBox: map[string]interface{}{
-			"left":   serializeDouble(bbox.X),
-			"bottom": serializeDouble(bbox.Y),
-			"right":  serializeDouble(bbox.X + bbox.Width),
-			"top":    serializeDouble(bbox.Y + bbox.Height),
-		},
+		jsonType:        objectType,
+		jsonPageNumber:  bbox.Page + 1,
+		jsonBoundingBox: []interface{}{serializeDouble(bbox.X), serializeDouble(bbox.Y), serializeDouble(bbox.X + bbox.Width), serializeDouble(bbox.Y + bbox.Height)},
 	}
-	if id := object.GetID(); id != "" {
+	if id, ok := numericID(object.GetID()); ok {
 		out[jsonID] = id
 	}
 	return out
+}
+
+func numericID(raw string) (int, bool) {
+	if raw == "" {
+		return 0, false
+	}
+	id, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, false
+	}
+	return id, true
 }
 
 func serializeTextChunks(chunks []*entities.TextChunk) string {
@@ -202,11 +209,11 @@ func serializeElements(elements []entities.IObject) []interface{} {
 		case *entities.SemanticCaption:
 			out = append(out, SerializeCaption(typed))
 		case *entities.TextChunk:
-			out = append(out, SerializeTextChunk(typed))
+			out = append(out, SerializeTextChunkContentElement(typed))
 		case *entities.SemanticHeaderFooter:
 			out = append(out, SerializeHeaderFooter(typed))
 		case *entities.TextLine:
-			out = append(out, SerializeTextLine(typed))
+			out = append(out, SerializeTextLineContentElement(typed))
 		}
 	}
 	return out

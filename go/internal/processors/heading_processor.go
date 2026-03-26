@@ -70,12 +70,18 @@ func (p *HeadingProcessor) headingScore(line *entities.TextLine, bodyFontSize fl
 	if text == "" {
 		return 0
 	}
+	if len([]rune(text)) >= 120 {
+		return 0
+	}
 
 	size := lineFontSize(line)
 	weight := lineFontWeight(line)
+	if bodyFontSize > 0 && size <= bodyFontSize*1.1 && !lineIsBold(line) {
+		return 0
+	}
 	score := 0.0
 
-	if bodyFontSize > 0 && size >= bodyFontSize {
+	if bodyFontSize > 0 && size > bodyFontSize*1.1 {
 		score += min(0.45, (size-bodyFontSize)/max(bodyFontSize, 1.0)+0.2)
 	}
 	score += stats.FontSizeRarityBoost(size)

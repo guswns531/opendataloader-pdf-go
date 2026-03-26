@@ -32,8 +32,7 @@ type ExtractedText struct {
 }
 
 func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, error) {
-	page, err := doc.GetPage(pageIdx)
-	if err != nil {
+	if _, err := doc.GetPage(pageIdx); err != nil {
 		return nil, err
 	}
 
@@ -58,6 +57,7 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 	var out []*ExtractedText
 
 	appendText := func(text string) {
+		text = normalizeExtractedText(text)
 		if text == "" || !ts.inText {
 			return
 		}
@@ -83,7 +83,7 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 			Italic:   strings.Contains(strings.ToLower(ts.fontName), "italic") || strings.Contains(strings.ToLower(ts.fontName), "oblique"),
 			Color:    ts.fillColor,
 			Baseline: y,
-			Page:     page.Number,
+			Page:     pageIdx,
 		})
 		// Advance text position. Most PDFs reset position via Tm/Td, so rough estimate is fine.
 		ts.textMatrix = ts.textMatrix.translate(float64(len([]rune(text)))*ts.fontSize*0.5, 0)
@@ -208,8 +208,8 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 	if out == nil {
 		return []*ExtractedText{}, nil
 	}
-	if page.Number <= 0 {
-		return nil, fmt.Errorf("invalid page number")
+	if pageIdx < 0 {
+		return nil, fmt.Errorf("invalid page index")
 	}
 	return out, nil
 }

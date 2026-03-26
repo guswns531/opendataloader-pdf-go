@@ -203,6 +203,7 @@ def _evaluate_engine_version(
     prediction_dir: Path,
     output_filename: str,
     target_doc_id: Optional[str] = None,
+    target_doc_ids: Optional[Set[str]] = None,
 ) -> Optional[Path]:
     """Run evaluation for a single ``engine/version`` directory."""
 
@@ -228,6 +229,8 @@ def _evaluate_engine_version(
     for gt_path in gt_paths:
         doc_id = gt_path.stem
         if target_doc_id and doc_id != target_doc_id:
+            continue
+        if target_doc_ids is not None and doc_id not in target_doc_ids:
             continue
 
         pred_path = markdown_dir / f"{doc_id}.md"
@@ -295,6 +298,7 @@ def run(
     output_filename: str,
     target_engine: Optional[str] = None,
     target_doc_id: Optional[str] = None,
+    target_doc_ids: Optional[Set[str]] = None,
 ) -> List[Path]:
     """Evaluate engine/version pairs under ``prediction_root`` optionally filtered to a single document."""
     project_root = Path(__file__).parent.parent.resolve()
@@ -322,7 +326,7 @@ def run(
 
     for engine_dir in engine_dirs:
         result_path = _evaluate_engine_version(
-            ground_truth_dir, engine_dir, output_filename, target_doc_id
+            ground_truth_dir, engine_dir, output_filename, target_doc_id, target_doc_ids
         )
         if result_path:
             generated_files.append(result_path)

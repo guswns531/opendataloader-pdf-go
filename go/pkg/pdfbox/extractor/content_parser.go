@@ -390,24 +390,59 @@ func decodeWinAnsi(b []byte) string {
 			allASCII = false
 			break
 		}
+		if _, ok := ligatureExtras[ch]; ok {
+			allASCII = false
+			break
+		}
 	}
 	if allASCII {
 		return string(b)
 	}
 
-	runes := make([]rune, 0, len(b))
-	for _, ch := range b {
+	var sb strings.Builder
+	for idx, ch := range b {
+		if ligature, ok := decodeLigatureByte(b, idx); ok {
+			sb.WriteString(ligature)
+			continue
+		}
 		if ch < 0x80 {
-			runes = append(runes, rune(ch))
+			sb.WriteRune(rune(ch))
 			continue
 		}
 		if r, ok := win1252Extras[ch]; ok {
-			runes = append(runes, r)
+			sb.WriteRune(r)
 			continue
 		}
-		runes = append(runes, rune(ch))
+		sb.WriteRune(rune(ch))
 	}
-	return string(runes)
+	return sb.String()
+}
+
+var ligatureExtras = map[byte]string{
+	0x01: "ff",
+	0x02: "fi",
+	0x03: "fl",
+	0x04: "ffi",
+	0x05: "ffl",
+}
+
+func decodeLigatureByte(b []byte, idx int) (string, bool) {
+	ch := b[idx]
+	ligature, ok := ligatureExtras[ch]
+	if !ok {
+		return "", false
+	}
+
+	prevIsLetter := idx > 0 && isASCIILetter(b[idx-1])
+	nextIsLetter := idx+1 < len(b) && isASCIILetter(b[idx+1])
+	if prevIsLetter && nextIsLetter {
+		return ligature, true
+	}
+	return "", false
+}
+
+func isASCIILetter(ch byte) bool {
+	return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
 }
 
 func parseFloatToken(tok streamToken) (float64, bool) {
@@ -503,10 +538,26 @@ func decodeTJText(tok streamToken) string {
 		if item.kind == "string" || item.kind == "hex" {
 			sb.WriteString(item.value)
 		} else if item.kind == "number" {
-			if v, ok := parseFloatToken(item); ok && v < tjSpaceThreshold {
+			if v, ok := parseFloatToken(item); ok && v <= tjSpaceThreshold {
 				sb.WriteByte(' ')
 			}
 		}
+	}
+	return normalizeExtractedText(sb.String())
+}
+
+func normalizeExtractedText(text string) string {
+	if text == "" {
+		return text
+	}
+	b := []byte(text)
+	var sb strings.Builder
+	for idx, ch := range b {
+		if ligature, ok := decodeLigatureByte(b, idx); ok {
+			sb.WriteString(ligature)
+			continue
+		}
+		sb.WriteByte(ch)
 	}
 	return sb.String()
 }

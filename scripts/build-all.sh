@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Build and test all packages: Java, Python, Node.js
+# Build and test all packages: Go, Java, Python, Node.js
 # Usage: ./scripts/build-all.sh [VERSION]
 # Example: ./scripts/build-all.sh 1.0.0
 # If VERSION is not provided, defaults to "0.0.0"
@@ -36,40 +36,53 @@ echo "========================================"
 # Java Build & Test
 # =================================================================
 echo ""
-echo "[1/3] Java: Building and testing..."
+echo "[1/4] Go: Building and testing..."
+echo "----------------------------------------"
+
+cd "$ROOT_DIR/go"
+go build -o ../bin/opendataloader-pdf ./cmd/opendataloader-pdf/
+go test ./... -race
+
+echo "[1/4] Go: Done"
+
+# =================================================================
+# Java Build & Test
+# =================================================================
+echo ""
+echo "[2/4] Java: Building and testing..."
 echo "----------------------------------------"
 
 cd "$ROOT_DIR/java"
 mvn versions:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
 "$SCRIPT_DIR/build-java.sh"
 
-echo "[1/3] Java: Done"
+echo "[2/4] Java: Done"
 
 # =================================================================
 # Python Build & Test
 # =================================================================
 echo ""
-echo "[2/3] Python: Building and testing..."
+echo "[3/4] Python: Building and testing..."
 echo "----------------------------------------"
 
 cd "$ROOT_DIR/python/opendataloader-pdf"
 sed -i.bak "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" pyproject.toml && rm -f pyproject.toml.bak
 "$SCRIPT_DIR/build-python.sh"
 
-echo "[2/3] Python: Done"
+echo "[3/4] Python: Done"
 
 # =================================================================
 # Node.js Build & Test
 # =================================================================
 echo ""
-echo "[3/3] Node.js: Building and testing..."
+echo "[4/4] Node.js: Building and testing..."
 echo "----------------------------------------"
 
 cd "$ROOT_DIR/node/opendataloader-pdf"
 pnpm version "$VERSION" --no-git-tag-version --allow-same-version
 "$SCRIPT_DIR/build-node.sh"
 
-echo "[3/3] Node.js: Done"
+echo "[4/4] Node.js: Done"
 
 # =================================================================
 # Summary

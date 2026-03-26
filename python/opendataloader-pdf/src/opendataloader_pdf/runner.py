@@ -1,6 +1,4 @@
-"""
-Low-level binary runner for opendataloader-pdf.
-"""
+"""Low-level Go binary runner for opendataloader-pdf."""
 import os
 import locale
 import platform
@@ -32,10 +30,15 @@ def _get_binary_path() -> str:
     )
 
 
+def _build_command(args: List[str]) -> List[str]:
+    """Build the subprocess command for the Go binary."""
+    return [_get_binary_path(), *args]
+
+
 def run_jar(args: List[str], quiet: bool = False) -> str:
-    """Run the opendataloader-pdf binary with the given arguments."""
+    """Backward-compatible alias for running the Go binary."""
     try:
-        command = [_get_binary_path(), *args]
+        command = _build_command(args)
 
         if quiet:
             result = subprocess.run(

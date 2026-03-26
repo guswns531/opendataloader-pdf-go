@@ -8,11 +8,50 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/containers"
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/processors"
 )
+
+func TestTableBorderProcessorDetectsSimpleRectangleTable(t *testing.T) {
+	ctx := containers.NewProcessorContext()
+	processor := &processors.TableBorderProcessor{}
+
+	elements := []entities.IObject{
+		textChunkInBox("A1", 20, 20, 20, 10, 0),
+	}
+	lineArts := rectangleLineArts(10, 10, 60, 40, 0)
+
+	result := processor.Process(elements, lineArts, ctx)
+
+	require.Len(t, result, 1)
+	table, ok := firstSemanticTableInObjects(result)
+	require.True(t, ok)
+	require.Len(t, table.Rows, 1)
+	require.Len(t, table.Rows[0].Cells, 1)
+	assert.Equal(t, "A1", cellText(table.Rows[0].Cells[0]))
+}
+
+func TestTableBorderProcessorProcessesNestedTablesTwoLevels(t *testing.T) {
+	ctx := containers.NewProcessorContext()
+	processor := &processors.TableBorderProcessor{}
+
+	elements, lineArts := nestedTableFixture(2, 0, 0, 220, 180, 0)
+	result := processor.Process(elements, lineArts, ctx)
+
+	require.Len(t, result, 1)
+	topTable, ok := firstSemanticTableInObjects(result)
+	require.True(t, ok)
+	assert.Equal(t, 2, countNestedTables(topTable))
+
+	nested, ok := firstNestedTable(topTable)
+	require.True(t, ok)
+	deepest := deepestCell(nested)
+	require.NotNil(t, deepest)
+	assert.Equal(t, "leaf", cellText(deepest))
+}
 
 func TestTableBorderProcessorStopsAtDepthLimit(t *testing.T) {
 	ctx := containers.NewProcessorContext()
@@ -21,22 +60,18 @@ func TestTableBorderProcessorStopsAtDepthLimit(t *testing.T) {
 	elements, lineArts := nestedTableFixture(11, 0, 0, 660, 660, 0)
 	result := processor.Process(elements, lineArts, ctx)
 
-	assert.Len(t, result, 1)
-
+	require.Len(t, result, 1)
 	topTable, ok := firstSemanticTableInObjects(result)
-	if !assert.True(t, ok, "expected a semantic table in processor output") {
-		return
-	}
+	require.True(t, ok, "expected a semantic table in processor output")
 
 	depth := countNestedTables(topTable)
 	assert.Equal(t, 10, depth)
 
 	deepest := deepestCell(topTable)
-	if assert.NotNil(t, deepest) {
-		assert.NotEmpty(t, deepest.Content)
-		_, nested := deepest.Content[0].(*entities.SemanticTable)
-		assert.False(t, nested, "processing should stop when depth reaches 10")
-	}
+	require.NotNil(t, deepest)
+	require.NotEmpty(t, deepest.Content)
+	_, nested := deepest.Content[0].(*entities.SemanticTable)
+	assert.False(t, nested, "processing should stop when depth reaches 10")
 }
 
 func nestedTableFixture(levels int, x, y, width, height float64, page int) ([]entities.IObject, []*entities.LineArtChunk) {
@@ -87,6 +122,39 @@ func lineArt(x, y, width, height float64, page int, horizontal, vertical bool) *
 		IsHorizontal: horizontal,
 		IsVertical:   vertical,
 	}
+}
+
+func textChunkInBox(text string, x, y, width, height float64, page int) *entities.TextChunk {
+	return &entities.TextChunk{
+		BaseObject: entities.BaseObject{
+			ID: text,
+			BBox: entities.BoundingBox{
+				X:      x,
+				Y:      y,
+				Width:  width,
+				Height: height,
+				Page:   page,
+			},
+		},
+		Text:     text,
+		Baseline: y + height/2,
+	}
+}
+
+func cellText(cell *entities.TableCell) string {
+	if cell == nil {
+		return ""
+	}
+	result := ""
+	for _, content := range cell.Content {
+		switch typed := content.(type) {
+		case *entities.TextChunk:
+			result += typed.Text
+		case *entities.TextLine:
+			result += typed.GetText()
+		}
+	}
+	return result
 }
 
 func countNestedTables(table *entities.SemanticTable) int {

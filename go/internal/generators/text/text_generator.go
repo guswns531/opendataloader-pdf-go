@@ -33,7 +33,7 @@ func (g *TextGenerator) Generate(doc *entities.Document) (string, error) {
 
 	var b strings.Builder
 	for pageIndex, page := range doc.Pages {
-		if g.config.TextPageSeparator != "" {
+		if g.config.TextPageSeparator != "" && pageIndex > 0 {
 			separator := g.config.TextPageSeparator
 			if strings.Contains(separator, api.PageNumberString) {
 				separator = strings.ReplaceAll(separator, api.PageNumberString, strconv.Itoa(pageIndex+1))

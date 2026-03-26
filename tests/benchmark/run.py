@@ -55,7 +55,9 @@ def run_benchmark(args: argparse.Namespace) -> dict:
 
     # Step 1: Parse PDFs
     logging.info("Starting PDF parsing with %s...", engine_name)
-    process_markdown(engine_name, str(input_dir), doc_id=args.doc_id)
+    selected_doc_ids = set(
+        process_markdown(engine_name, str(input_dir), doc_id=args.doc_id, limit=args.limit)
+    )
 
     # Step 2: Run evaluation
     logging.info("Running evaluation...")
@@ -65,6 +67,7 @@ def run_benchmark(args: argparse.Namespace) -> dict:
         args.evaluation_filename,
         target_engine=engine_name,
         target_doc_id=args.doc_id,
+        target_doc_ids=selected_doc_ids if args.limit and not args.doc_id else None,
     )
 
     if not evaluation_paths:
@@ -77,7 +80,9 @@ def run_benchmark(args: argparse.Namespace) -> dict:
     prediction_markdown_dir = prediction_engine_dir / "markdown"
 
     table_detection_metrics = evaluate_table_detection_batch(
-        reference_path, prediction_markdown_dir
+        reference_path,
+        prediction_markdown_dir,
+        target_doc_ids=selected_doc_ids if args.limit and not args.doc_id else None,
     )
 
     # Load evaluation results
@@ -101,7 +106,11 @@ def run_benchmark(args: argparse.Namespace) -> dict:
         }
 
     # Step 5: Triage evaluation (for hybrid mode)
-    triage_metrics = evaluate_triage_batch(reference_path, prediction_engine_dir)
+    triage_metrics = evaluate_triage_batch(
+        reference_path,
+        prediction_engine_dir,
+        target_doc_ids=selected_doc_ids if args.limit and not args.doc_id else None,
+    )
     if triage_metrics.total_pages_evaluated > 0:
         eval_data["triage"] = triage_metrics.to_dict()
         logging.info("Triage evaluation: recall=%.4f, fn=%d",
@@ -259,6 +268,18 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Process only the specified document ID",
     )
     parser.add_argument(
+        "--doc",
+        dest="doc_id",
+        default=None,
+        help="Alias for --doc-id",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Process only the first N documents",
+    )
+    parser.add_argument(
         "--ground-truth-dir",
         default=DEFAULT_GT_DIR,
         help="Directory containing ground-truth markdown files",
@@ -277,6 +298,11 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--check-regression",
         action="store_true",
         help="Check results against thresholds and exit with error if failed",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable verbose benchmark logging",
     )
     parser.add_argument(
         "--thresholds",
@@ -300,7 +326,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[Sequence[str]] = None) -> None:
     args = _parse_args(argv)
     logging.basicConfig(
-        level=getattr(logging, args.log_level.upper(), logging.INFO),
+        level=logging.DEBUG if args.debug else getattr(logging, args.log_level.upper(), logging.INFO),
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 

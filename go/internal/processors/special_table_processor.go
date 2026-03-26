@@ -21,7 +21,7 @@ func (p *SpecialTableProcessor) Process(elements []entities.IObject, ctx *contai
 		return append([]entities.IObject(nil), elements...)
 	}
 
-	tables := detectAlignmentTables(lines, ctx)
+	tables, consumed := detectAlignmentTables(lines, ctx)
 	if len(tables) == 0 {
 		return append([]entities.IObject(nil), elements...)
 	}
@@ -30,12 +30,10 @@ func (p *SpecialTableProcessor) Process(elements []entities.IObject, ctx *contai
 	result := make([]entities.IObject, 0, len(elements))
 	for _, table := range tables {
 		result = append(result, table)
-		for _, row := range table.Rows {
-			for _, cell := range row.Cells {
-				for _, content := range cell.Content {
-					used[content.GetID()] = struct{}{}
-				}
-			}
+	}
+	for _, line := range consumed {
+		if line != nil {
+			used[line.GetID()] = struct{}{}
 		}
 	}
 	for _, element := range elements {
@@ -70,8 +68,9 @@ func collectTextLines(elements []entities.IObject) []*entities.TextLine {
 	return lines
 }
 
-func detectAlignmentTables(lines []*entities.TextLine, ctx *containers.ProcessorContext) []*entities.SemanticTable {
+func detectAlignmentTables(lines []*entities.TextLine, ctx *containers.ProcessorContext) ([]*entities.SemanticTable, []*entities.TextLine) {
 	tables := make([]*entities.SemanticTable, 0)
+	consumed := make([]*entities.TextLine, 0)
 	var group []*entities.TextLine
 	var signature []float64
 
@@ -83,6 +82,7 @@ func detectAlignmentTables(lines []*entities.TextLine, ctx *containers.Processor
 		}
 		if table := buildAlignedTextTable(group, signature, ctx); table != nil && len(table.Rows) >= 2 {
 			tables = append(tables, table)
+			consumed = append(consumed, group...)
 		}
 		group = nil
 		signature = nil
@@ -110,7 +110,7 @@ func detectAlignmentTables(lines []*entities.TextLine, ctx *containers.Processor
 	}
 	flush()
 
-	return tables
+	return tables, consumed
 }
 
 func lineColumnPositions(line *entities.TextLine) []float64 {
@@ -150,7 +150,6 @@ func mergePositions(a, b []float64) []float64 {
 func buildAlignedTextTable(lines []*entities.TextLine, positions []float64, ctx *containers.ProcessorContext) *entities.SemanticTable {
 	rowBounds := make([]float64, 0, len(lines)+1)
 	colBounds := append([]float64(nil), positions...)
-	cells := make(map[[2]int][]entities.IObject)
 
 	for rowIdx, line := range lines {
 		top := bboxTop(line.GetBBox())
@@ -159,16 +158,6 @@ func buildAlignedTextTable(lines []*entities.TextLine, positions []float64, ctx 
 			rowBounds = append(rowBounds, top)
 		}
 		rowBounds = append(rowBounds, bottom)
-		for _, chunk := range line.Chunks {
-			if chunk == nil || isWhitespaceChunk(chunk) {
-				continue
-			}
-			col := nearestColumn(colBounds, chunk.GetBBox().X)
-			if col < 0 {
-				continue
-			}
-			cells[[2]int{rowIdx, col}] = append(cells[[2]int{rowIdx, col}], chunk)
-		}
 	}
 
 	lastRight := bboxRight(lines[0].GetBBox())
@@ -180,20 +169,42 @@ func buildAlignedTextTable(lines []*entities.TextLine, positions []float64, ctx 
 	if len(colBounds) < 3 {
 		return nil
 	}
+
+	cells := make(map[[2]int][]entities.IObject)
+	for rowIdx, line := range lines {
+		for _, chunk := range line.Chunks {
+			if chunk == nil || isWhitespaceChunk(chunk) {
+				continue
+			}
+			col := nearestColumn(colBounds, chunk.GetBBox().X)
+			if col < 0 {
+				continue
+			}
+			cells[[2]int{rowIdx, col}] = append(cells[[2]int{rowIdx, col}], chunk)
+		}
+	}
 	return buildTableFromGrid(rowBounds, colBounds, cells, lines[0].GetBBox().Page, ctx)
 }
 
 func nearestColumn(bounds []float64, x float64) int {
-	for idx := 0; idx < len(bounds)-1; idx++ {
-		if x >= bounds[idx]-tableAlignmentTolerance && x <= bounds[idx+1]+tableAlignmentTolerance {
-			return idx
-		}
-	}
-	if len(bounds) == 0 {
+	if len(bounds) < 2 {
 		return -1
 	}
-	if x >= bounds[len(bounds)-1]-tableAlignmentTolerance {
-		return len(bounds) - 2
+
+	bestIdx := -1
+	bestDistance := 0.0
+	for idx := 0; idx < len(bounds)-1; idx++ {
+		distance := x - bounds[idx]
+		if distance < -tableAlignmentTolerance {
+			continue
+		}
+		if bestIdx == -1 || distance < bestDistance {
+			bestIdx = idx
+			bestDistance = distance
+		}
+	}
+	if bestIdx >= 0 {
+		return bestIdx
 	}
 	return -1
 }

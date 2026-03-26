@@ -23,6 +23,7 @@ var disableConfigDir sync.Once
 type PDDocument struct {
 	Path     string
 	Password string
+	Ctx      *pdfmodel.Context
 	Context  *pdfmodel.Context
 
 	file     *os.File
@@ -78,6 +79,7 @@ func Open(path, password string) (*PDDocument, error) {
 	return &PDDocument{
 		Path:     path,
 		Password: password,
+		Ctx:      ctx,
 		Context:  ctx,
 		file:     f,
 		pageDims: pageDims,
@@ -119,6 +121,7 @@ func (d *PDDocument) Close() error {
 	}
 	err := d.file.Close()
 	d.file = nil
+	d.Ctx = nil
 	d.Context = nil
 	d.pageDims = nil
 	return err

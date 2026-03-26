@@ -11,7 +11,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Set
 
 
 @dataclass
@@ -120,6 +120,7 @@ def compute_metrics(
 def evaluate_table_detection_batch(
     reference_path: Path,
     prediction_markdown_dir: Path,
+    target_doc_ids: Optional[Set[str]] = None,
 ) -> TableDetectionMetrics:
     """Evaluate table detection across all documents.
 
@@ -135,6 +136,8 @@ def evaluate_table_detection_batch(
     tp = fp = fn = tn = 0
 
     for doc_id, gt_has_table in gt_tables.items():
+        if target_doc_ids is not None and doc_id not in target_doc_ids:
+            continue
         pred_path = prediction_markdown_dir / f"{doc_id}.md"
 
         if not pred_path.exists():

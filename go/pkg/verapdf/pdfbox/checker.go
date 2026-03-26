@@ -20,24 +20,21 @@ func (c *PDFAChecker) Check(features *PDFFeatures) *model.ValidationResult {
 	}
 
 	if features == nil {
-		result.Errors = append(result.Errors, model.ValidationError{
-			RuleID:      "GENERAL_FEATURES_PRESENT",
-			Description: "PDF features are required for validation",
-			Object:      "document",
-		})
+		addRuleResult(result, "GENERAL_FEATURES_PRESENT", false,
+			"PDF features are required for validation", "input", "document")
 		finalizeValidationResult(result)
 		return result
 	}
 
 	addMetadataRule(result, features)
+	addEmbeddedFontsRule(result, features)
+	addColorSpaceRule(result, features)
 
 	switch c.Flavour {
-	case model.PDFA_1_B:
-		addRuleResult(result, "PDFA_1_B_FONTS_EMBEDDED", features.FontsEmbedded,
-			"All fonts must be embedded for PDF/A-1b", "document")
-	case model.PDFA_2_A, model.PDFA_3_A:
-		addRuleResult(result, "PDFA_A_STRUCTURE_TREE", features.HasStructureTree,
-			"Structure tree is required for tagged PDF/A level A compliance", "document")
+	case model.PDFA_1_A, model.PDFA_2_A, model.PDFA_3_A:
+		addAccessibleStructureRules(result, features)
+	case model.PDFA_1_B, model.PDFA_2_B, model.PDFA_2_U, model.PDFA_3_B, model.PDFA_3_U, model.PDFA_4, model.PDFA_4_E, model.PDFA_4_F:
+	default:
 	}
 
 	finalizeValidationResult(result)
@@ -46,10 +43,36 @@ func (c *PDFAChecker) Check(features *PDFFeatures) *model.ValidationResult {
 
 func addMetadataRule(result *model.ValidationResult, features *PDFFeatures) {
 	addRuleResult(result, "PDFA_METADATA_PRESENT", features.HasMetadata,
-		"XMP metadata is required for PDF/A compliance", "document")
+		"XMP metadata is required for PDF/A compliance", "Catalog.Metadata", "document")
 }
 
-func addRuleResult(result *model.ValidationResult, ruleID string, passed bool, description string, object string) {
+func addEmbeddedFontsRule(result *model.ValidationResult, features *PDFFeatures) {
+	addRuleResult(result, "PDFA_FONTS_EMBEDDED", features.FontsEmbedded,
+		"All fonts must be embedded for PDF/A compliance", "Resources.Font", "document")
+}
+
+func addColorSpaceRule(result *model.ValidationResult, features *PDFFeatures) {
+	requiresOutputIntent := false
+	for _, colorSpace := range features.ColorSpaces {
+		switch colorSpace {
+		case "DeviceRGB", "DeviceCMYK", "DeviceGray":
+			requiresOutputIntent = true
+		}
+	}
+	addRuleResult(result, "PDFA_OUTPUT_INTENT_OR_DEVICE_INDEPENDENT_COLOR", !requiresOutputIntent || features.HasOutputIntent,
+		"Device color spaces require an output intent for PDF/A compliance", "Catalog.OutputIntents", "document")
+}
+
+func addAccessibleStructureRules(result *model.ValidationResult, features *PDFFeatures) {
+	addRuleResult(result, "PDFA_A_STRUCTURE_TREE", features.HasStructureTree,
+		"Structure tree is required for tagged PDF/A level A compliance", "Catalog.StructTreeRoot", "document")
+	addRuleResult(result, "PDFA_A_DOCUMENT_TITLE", features.HasDocumentTitle,
+		"Document title is required for tagged PDF/A level A compliance", "Info.Title", "document")
+	addRuleResult(result, "PDFA_A_DOCUMENT_LANGUAGE", features.HasLanguage,
+		"Document language is required for tagged PDF/A level A compliance", "Catalog.Lang", "document")
+}
+
+func addRuleResult(result *model.ValidationResult, ruleID string, passed bool, description string, location string, object string) {
 	result.TotalRules++
 	if passed {
 		result.PassedRules++
@@ -60,6 +83,7 @@ func addRuleResult(result *model.ValidationResult, ruleID string, passed bool, d
 	result.Errors = append(result.Errors, model.ValidationError{
 		RuleID:      ruleID,
 		Description: description,
+		Location:    location,
 		Object:      object,
 	})
 }

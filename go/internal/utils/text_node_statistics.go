@@ -7,7 +7,7 @@
 
 package utils
 
-import "sort"
+import "math"
 
 type TextNodeStatisticsConfig struct {
 	FontSizeDominantMin   float64
@@ -37,79 +37,23 @@ func DefaultTextNodeStatisticsConfig() TextNodeStatisticsConfig {
 	}
 }
 
-type modeWeightStatistics struct {
-	scoreMin float64
-	scoreMax float64
-	modeMin  float64
-	modeMax  float64
-	countMap map[float64]int
-}
-
-func newModeWeightStatistics(scoreMin, scoreMax, modeMin, modeMax float64) *modeWeightStatistics {
-	return &modeWeightStatistics{
-		scoreMin: scoreMin,
-		scoreMax: scoreMax,
-		modeMin:  modeMin,
-		modeMax:  modeMax,
-		countMap: make(map[float64]int),
-	}
-}
-
-func (m *modeWeightStatistics) addScore(score float64) {
-	m.countMap[score]++
-}
-
-func (m *modeWeightStatistics) getBoost(score float64) float64 {
-	type entry struct {
-		score float64
-		count int
-	}
-	var entries []entry
-	for s, c := range m.countMap {
-		entries = append(entries, entry{score: s, count: c})
-	}
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].count == entries[j].count {
-			return entries[i].score < entries[j].score
-		}
-		return entries[i].count > entries[j].count
-	})
-	mode := 0.0
-	for _, item := range entries {
-		if item.score >= m.modeMin && item.score <= m.modeMax {
-			mode = item.score
-			break
-		}
-	}
-	var higher []float64
-	for _, item := range entries {
-		if item.score > mode && item.score >= m.scoreMin && item.score <= m.scoreMax {
-			higher = append(higher, item.score)
-		}
-	}
-	sort.Float64s(higher)
-	if len(higher) == 0 {
-		return 0
-	}
-	for i, value := range higher {
-		if value == score {
-			return float64(i+1) / float64(len(higher))
-		}
-	}
-	return 0
-}
-
 type TextNodeStatistics struct {
-	fontSizeStatistics   *modeWeightStatistics
-	fontWeightStatistics *modeWeightStatistics
+	fontSizeStatistics   *ModeWeightStatistics
+	fontWeightStatistics *ModeWeightStatistics
 	config               TextNodeStatisticsConfig
+	fontSizeCount        int
+	fontSizeSum          float64
+	fontSizeSumSquares   float64
+	fontWeightCount      int
+	fontWeightSum        float64
+	fontWeightSumSquares float64
 }
 
 func NewTextNodeStatistics() *TextNodeStatistics {
 	cfg := DefaultTextNodeStatisticsConfig()
 	return &TextNodeStatistics{
-		fontSizeStatistics:   newModeWeightStatistics(cfg.FontSizeHeadingMin, cfg.FontSizeHeadingMax, cfg.FontSizeDominantMin, cfg.FontSizeDominantMax),
-		fontWeightStatistics: newModeWeightStatistics(cfg.FontWeightHeadingMin, cfg.FontWeightHeadingMax, cfg.FontWeightDominantMin, cfg.FontWeightDominantMax),
+		fontSizeStatistics:   NewModeWeightStatistics(cfg.FontSizeHeadingMin, cfg.FontSizeHeadingMax, cfg.FontSizeDominantMin, cfg.FontSizeDominantMax),
+		fontWeightStatistics: NewModeWeightStatistics(cfg.FontWeightHeadingMin, cfg.FontWeightHeadingMax, cfg.FontWeightDominantMin, cfg.FontWeightDominantMax),
 		config:               cfg,
 	}
 }
@@ -118,20 +62,77 @@ func (s *TextNodeStatistics) Add(fontSize, fontWeight float64) {
 	if s == nil {
 		return
 	}
-	s.fontSizeStatistics.addScore(fontSize)
-	s.fontWeightStatistics.addScore(fontWeight)
+	s.fontSizeStatistics.AddScore(fontSize)
+	s.fontWeightStatistics.AddScore(fontWeight)
+	s.fontSizeCount++
+	s.fontSizeSum += fontSize
+	s.fontSizeSumSquares += fontSize * fontSize
+	s.fontWeightCount++
+	s.fontWeightSum += fontWeight
+	s.fontWeightSumSquares += fontWeight * fontWeight
+}
+
+func (s *TextNodeStatistics) FontSizeMode() float64 {
+	if s == nil {
+		return 0
+	}
+	return s.fontSizeStatistics.GetMode()
+}
+
+func (s *TextNodeStatistics) FontWeightMode() float64 {
+	if s == nil {
+		return 0
+	}
+	return s.fontWeightStatistics.GetMode()
+}
+
+func (s *TextNodeStatistics) FontSizeMean() float64 {
+	if s == nil || s.fontSizeCount == 0 {
+		return 0
+	}
+	return s.fontSizeSum / float64(s.fontSizeCount)
+}
+
+func (s *TextNodeStatistics) FontWeightMean() float64 {
+	if s == nil || s.fontWeightCount == 0 {
+		return 0
+	}
+	return s.fontWeightSum / float64(s.fontWeightCount)
+}
+
+func (s *TextNodeStatistics) FontSizeStdDev() float64 {
+	if s == nil || s.fontSizeCount == 0 {
+		return 0
+	}
+	return stddev(s.fontSizeSum, s.fontSizeSumSquares, s.fontSizeCount)
+}
+
+func (s *TextNodeStatistics) FontWeightStdDev() float64 {
+	if s == nil || s.fontWeightCount == 0 {
+		return 0
+	}
+	return stddev(s.fontWeightSum, s.fontWeightSumSquares, s.fontWeightCount)
 }
 
 func (s *TextNodeStatistics) FontSizeRarityBoost(fontSize float64) float64 {
 	if s == nil {
 		return 0
 	}
-	return s.fontSizeStatistics.getBoost(fontSize) * s.config.FontSizeRarityBoost
+	return s.fontSizeStatistics.GetBoost(fontSize) * s.config.FontSizeRarityBoost
 }
 
 func (s *TextNodeStatistics) FontWeightRarityBoost(fontWeight float64) float64 {
 	if s == nil {
 		return 0
 	}
-	return s.fontWeightStatistics.getBoost(fontWeight) * s.config.FontWeightRarityBoost
+	return s.fontWeightStatistics.GetBoost(fontWeight) * s.config.FontWeightRarityBoost
+}
+
+func stddev(sum, sumSquares float64, count int) float64 {
+	mean := sum / float64(count)
+	variance := sumSquares/float64(count) - mean*mean
+	if variance < 0 {
+		variance = 0
+	}
+	return math.Sqrt(variance)
 }

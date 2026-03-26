@@ -34,7 +34,7 @@ def convert(
     hybrid: Optional[str] = None,
     hybrid_mode: Optional[str] = None,
     hybrid_url: Optional[str] = None,
-    hybrid_timeout: Optional[str] = None,
+    hybrid_timeout: Optional[int] = 30000,
     hybrid_fallback: bool = False,
 ) -> None:
     """
@@ -77,9 +77,9 @@ def convert(
         args.append(input_path)
 
     if output_dir:
-        args.extend(["--output-dir", output_dir])
+        args.extend(["--output-dir", str(output_dir)])
     if password:
-        args.extend(["--password", password])
+        args.extend(["--password", str(password)])
     if format:
         if isinstance(format, list):
             if format:
@@ -99,39 +99,39 @@ def convert(
     if keep_line_breaks:
         args.append("--keep-line-breaks")
     if replace_invalid_chars:
-        args.extend(["--replace-invalid-chars", replace_invalid_chars])
+        args.extend(["--replace-invalid-chars", str(replace_invalid_chars)])
     if use_struct_tree:
         args.append("--use-struct-tree")
     if table_method:
-        args.extend(["--table-method", table_method])
+        args.extend(["--table-method", str(table_method)])
     if reading_order:
-        args.extend(["--reading-order", reading_order])
+        args.extend(["--reading-order", str(reading_order)])
     if markdown_page_separator:
-        args.extend(["--markdown-page-separator", markdown_page_separator])
+        args.extend(["--markdown-page-separator", str(markdown_page_separator)])
     if text_page_separator:
-        args.extend(["--text-page-separator", text_page_separator])
+        args.extend(["--text-page-separator", str(text_page_separator)])
     if html_page_separator:
-        args.extend(["--html-page-separator", html_page_separator])
+        args.extend(["--html-page-separator", str(html_page_separator)])
     if image_output:
-        args.extend(["--image-output", image_output])
+        args.extend(["--image-output", str(image_output)])
     if image_format:
-        args.extend(["--image-format", image_format])
+        args.extend(["--image-format", str(image_format)])
     if image_dir:
-        args.extend(["--image-dir", image_dir])
+        args.extend(["--image-dir", str(image_dir)])
     if pages:
-        args.extend(["--pages", pages])
+        args.extend(["--pages", str(pages)])
     if include_header_footer:
         args.append("--include-header-footer")
     if detect_strikethrough:
         args.append("--detect-strikethrough")
     if hybrid:
-        args.extend(["--hybrid", hybrid])
+        args.extend(["--hybrid", str(hybrid)])
     if hybrid_mode:
-        args.extend(["--hybrid-mode", hybrid_mode])
+        args.extend(["--hybrid-mode", str(hybrid_mode)])
     if hybrid_url:
-        args.extend(["--hybrid-url", hybrid_url])
+        args.extend(["--hybrid-url", str(hybrid_url)])
     if hybrid_timeout:
-        args.extend(["--hybrid-timeout", hybrid_timeout])
+        args.extend(["--hybrid-timeout", str(hybrid_timeout)])
     if hybrid_fallback:
         args.append("--hybrid-fallback")
 

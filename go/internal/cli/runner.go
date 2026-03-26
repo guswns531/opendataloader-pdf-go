@@ -51,6 +51,9 @@ func Run(opts *CLIOptions, args []string) error {
 func processPath(path string, config *api.Config) error {
 	info, err := os.Stat(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("file not found: %s", path)
+		}
 		return err
 	}
 
@@ -79,7 +82,7 @@ func processPath(path string, config *api.Config) error {
 	}
 
 	if !isPDFPath(path) {
-		return fmt.Errorf("%s is not a PDF file", path)
+		return fmt.Errorf("not a PDF file: %s", path)
 	}
 	return api.ProcessFile(path, config)
 }

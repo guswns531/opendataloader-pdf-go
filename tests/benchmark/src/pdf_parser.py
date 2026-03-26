@@ -27,7 +27,8 @@ def process_markdown(
     engine_name: str,
     input_dir_name: str,
     doc_id: Optional[str] = None,
-):
+    limit: Optional[int] = None,
+) -> list[str]:
     """Run PDF-to-Markdown conversion for a single engine.
 
     Creates an output directory, converts all PDFs from the input directory
@@ -48,6 +49,8 @@ def process_markdown(
         input_path = candidate_path
     else:
         document_paths = sorted(input_dir.glob("*.pdf"))
+        if limit is not None and limit > 0:
+            document_paths = document_paths[:limit]
         input_path = input_dir
         if not document_paths:
             raise FileNotFoundError(f"No PDFs found in {input_dir}.")
@@ -91,6 +94,7 @@ def process_markdown(
         json.dump(summary_data, f, indent=4)
 
     logging.info("Summary saved to %s", summary_file_path)
+    return [path.stem for path in document_paths]
 
 
 def _parse_args(argv: Optional[List[str]] = None):

@@ -26,6 +26,10 @@ func TestMarkdownGeneratorHeading(t *testing.T) {
 						Level: 1,
 						Lines: []*entities.TextLine{{Chunks: []*entities.TextChunk{{Text: "title"}}}},
 					},
+					&entities.SemanticHeading{
+						Level: 2,
+						Lines: []*entities.TextLine{{Chunks: []*entities.TextChunk{{Text: "subtitle"}}}},
+					},
 				},
 			},
 		},
@@ -35,6 +39,7 @@ func TestMarkdownGeneratorHeading(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Contains(t, got, "# title")
+	assert.Contains(t, got, "## subtitle")
 }
 
 func TestMarkdownGeneratorTable(t *testing.T) {
@@ -81,6 +86,30 @@ func TestMarkdownGeneratorPageSeparator(t *testing.T) {
 	got, err := markdown.NewMarkdownGenerator(cfg, false, false).Generate(doc)
 
 	assert.NoError(t, err)
-	assert.Contains(t, got, "--- page 1 ---")
 	assert.Contains(t, got, "--- page 2 ---")
+	assert.NotContains(t, got, "--- page 1 ---")
+}
+
+func TestMarkdownGeneratorEmbeddedImage(t *testing.T) {
+	cfg := api.DefaultConfig()
+	cfg.ImageOutput = api.ImageOutputEmbedded
+	cfg.ImageFormat = api.ImageFormatPNG
+
+	doc := &entities.Document{
+		Pages: []*entities.Page{
+			{
+				Elements: []entities.IObject{
+					&entities.SemanticImage{
+						Alt:  "diagram",
+						Data: []byte{0x89, 0x50, 0x4e, 0x47},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := markdown.NewMarkdownGenerator(cfg, false, true).Generate(doc)
+
+	assert.NoError(t, err)
+	assert.Contains(t, got, "![diagram](data:image/png;base64,")
 }

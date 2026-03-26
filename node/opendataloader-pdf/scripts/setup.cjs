@@ -1,37 +1,37 @@
 const fs = require('fs');
 const path = require('path');
-const { globSync } = require('glob');
 
 const rootDir = path.resolve(__dirname, '..');
-const javaDir = path.resolve(rootDir, '../../java');
-const sourceJarGlob = path
-  .join(javaDir, 'opendataloader-pdf-cli/target/opendataloader-pdf-cli-*.jar')
-  .replace(/\\/g, '/');
+const binaryName = process.platform === 'win32' ? 'opendataloader-pdf.exe' : 'opendataloader-pdf';
+const envBinary = process.env.OPENDATALOADER_PDF_BIN;
+const candidateBinaries = [
+  envBinary,
+  path.join(rootDir, '../../bin', binaryName),
+  path.join(rootDir, '../../go', binaryName),
+].filter(Boolean);
 
-console.log(`Searching for JAR file in: ${sourceJarGlob}`);
-
-const sourceJarPaths = globSync(sourceJarGlob);
-if (sourceJarPaths.length === 0) {
+const sourceBinaryPath = candidateBinaries.find((candidate) => fs.existsSync(candidate));
+if (!sourceBinaryPath) {
   console.error(
-    "Could not find the JAR file. Please run 'mvn package' in the 'java/' directory first.",
+    'Could not find the opendataloader-pdf binary. ' +
+      "Set OPENDATALOADER_PDF_BIN or run 'cd go && go build -o ../bin/opendataloader-pdf ./cmd/opendataloader-pdf/' first.",
   );
-  process.exit(1);
-}
-if (sourceJarPaths.length > 1) {
-  console.error(`Found multiple JAR files, expected one: ${sourceJarPaths}`);
+  console.error(`Searched: ${candidateBinaries.join(', ')}`);
   process.exit(1);
 }
 
-const sourceJarPath = sourceJarPaths[0];
-console.log(`Found source JAR: ${sourceJarPath}`);
+console.log(`Found source binary: ${sourceBinaryPath}`);
 
-const destJarDir = path.join(rootDir, 'lib').replace(/\\/g, '/');
-if (!fs.existsSync(destJarDir)) {
-  fs.mkdirSync(destJarDir, { recursive: true });
+const destBinDir = path.join(rootDir, 'bin').replace(/\\/g, '/');
+if (!fs.existsSync(destBinDir)) {
+  fs.mkdirSync(destBinDir, { recursive: true });
 }
-const destJarPath = path.join(destJarDir, 'opendataloader-pdf-cli.jar').replace(/\\/g, '/');
-console.log(`Copying JAR to ${destJarPath}`);
-fs.copyFileSync(sourceJarPath, destJarPath);
+const destBinaryPath = path.join(destBinDir, binaryName).replace(/\\/g, '/');
+console.log(`Copying binary to ${destBinaryPath}`);
+fs.copyFileSync(sourceBinaryPath, destBinaryPath);
+if (process.platform !== 'win32') {
+  fs.chmodSync(destBinaryPath, 0o755);
+}
 
 // Copy README.md, LICENSE, NOTICE, and THIRD_PARTY
 const readmeSrc = path.resolve(rootDir, '../../README.md');

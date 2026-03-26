@@ -51,7 +51,36 @@ func canMerge(line1, line2 *entities.TextLine) bool {
 	if line1 == nil || line2 == nil {
 		return false
 	}
+	if line1.BBox.Page != line2.BBox.Page {
+		return false
+	}
 	if isLabeledLine(line2) {
+		return false
+	}
+
+	font1 := averageFontSize(line1.Chunks)
+	font2 := averageFontSize(line2.Chunks)
+	if !similarFontSize(font1, font2) {
+		return false
+	}
+
+	alignment := detectPairAlignment(line1, line2)
+	if alignment == "" {
+		return false
+	}
+
+	if horizontalOverlapRatio(line1.BBox, line2.BBox) <= 0.50 {
+		return false
+	}
+
+	lineHeight := math.Max(line1.BBox.Height, line2.BBox.Height)
+	if lineHeight <= 0 {
+		lineHeight = math.Max(font1, font2)
+	}
+	if lineHeight <= 0 {
+		lineHeight = 1
+	}
+	if lineVerticalGap(line1.BBox, line2.BBox) >= lineHeight*1.5 {
 		return false
 	}
 
@@ -62,40 +91,41 @@ func canMerge(line1, line2 *entities.TextLine) bool {
 func mergeProbability(line1, line2 *entities.TextLine) float64 {
 	font1 := averageFontSize(line1.Chunks)
 	font2 := averageFontSize(line2.Chunks)
-	avgFont := (font1 + font2) / 2
-	if avgFont <= 0 {
-		avgFont = 1
+	if font1 <= 0 {
+		font1 = line1.BBox.Height
+	}
+	if font2 <= 0 {
+		font2 = line2.BBox.Height
+	}
+	lineHeight := math.Max(line1.BBox.Height, line2.BBox.Height)
+	if lineHeight <= 0 {
+		lineHeight = math.Max(font1, font2)
+	}
+	if lineHeight <= 0 {
+		lineHeight = 1
 	}
 
-	var score float64
-	if closeEnough(font1, font2, 0.5) {
-		score += 0.2
-	}
-	if shareComparableWeight(line1, line2) {
-		score += 0.1
-	}
+	alignment := detectPairAlignment(line1, line2)
+	fontSimilar := similarFontSize(font1, font2)
+	overlapRatio := horizontalOverlapRatio(line1.BBox, line2.BBox)
+	verticalGap := lineVerticalGap(line1.BBox, line2.BBox)
 
-	gap := line1.BBox.Y - (line2.BBox.Y + line2.BBox.Height)
-	if gap < 0 {
-		gap = line2.BBox.Y - (line1.BBox.Y + line1.BBox.Height)
+	score := 0.0
+	if alignment != "" {
+		score += 0.30
 	}
-	if gap <= avgFont*0.75 {
-		score += 0.35
-	} else if gap <= avgFont*1.5 {
-		score += 0.2
-	}
-
-	if horizontalOverlap(line1.BBox, line2.BBox) > 0 {
-		score += 0.15
-	}
-
-	switch detectPairAlignment(line1, line2) {
-	case entities.AlignJustify:
-		score += 0.2
-	case entities.AlignLeft, entities.AlignRight, entities.AlignCenter:
+	if fontSimilar {
 		score += 0.25
 	}
-
+	if shareComparableWeight(line1, line2) {
+		score += 0.10
+	}
+	if overlapRatio > 0.50 {
+		score += 0.15
+	}
+	if verticalGap < lineHeight*1.5 {
+		score += 0.20
+	}
 	return score
 }
 
@@ -106,9 +136,10 @@ func detectPairAlignment(line1, line2 *entities.TextLine) string {
 	center1 := line1.BBox.X + line1.BBox.Width/2
 	center2 := line2.BBox.X + line2.BBox.Width/2
 	centerAligned := closeEnough(center1, center2, tolerance)
+	justifyAligned := line1.BBox.Width >= line2.BBox.Width*0.9 && line2.BBox.Width >= line1.BBox.Width*0.9 && leftAligned && rightAligned
 
 	switch {
-	case leftAligned && rightAligned:
+	case justifyAligned:
 		return entities.AlignJustify
 	case leftAligned:
 		return entities.AlignLeft
@@ -220,6 +251,34 @@ func horizontalOverlap(a, b entities.BoundingBox) float64 {
 	left := math.Max(a.X, b.X)
 	right := math.Min(a.X+a.Width, b.X+b.Width)
 	return right - left
+}
+
+func horizontalOverlapRatio(a, b entities.BoundingBox) float64 {
+	overlap := horizontalOverlap(a, b)
+	if overlap <= 0 {
+		return 0
+	}
+	minWidth := math.Min(a.Width, b.Width)
+	if minWidth <= 0 {
+		return 0
+	}
+	return overlap / minWidth
+}
+
+func lineVerticalGap(a, b entities.BoundingBox) float64 {
+	if a.Y >= b.Y {
+		return math.Abs(a.Y - (b.Y + b.Height))
+	}
+	return math.Abs(b.Y - (a.Y + a.Height))
+}
+
+func similarFontSize(a, b float64) bool {
+	if a <= 0 || b <= 0 {
+		return false
+	}
+	diff := math.Abs(a - b)
+	maxSize := math.Max(a, b)
+	return diff/maxSize <= 0.10
 }
 
 func closeEnough(a, b, tolerance float64) bool {

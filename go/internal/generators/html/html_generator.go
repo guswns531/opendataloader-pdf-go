@@ -53,7 +53,7 @@ func (g *HtmlGenerator) Generate(doc *entities.Document) (string, error) {
 }
 
 func (g *HtmlGenerator) writePageSeparator(b *strings.Builder, pageIndex int) {
-	if g.config.HTMLPageSeparator == "" {
+	if g.config.HTMLPageSeparator == "" || pageIndex <= 0 {
 		return
 	}
 	separator := g.config.HTMLPageSeparator

@@ -14,7 +14,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set
 
 
 @dataclass
@@ -172,6 +172,7 @@ def evaluate_triage(
 def evaluate_triage_batch(
     reference_path: Path,
     triage_dir: Path,
+    target_doc_ids: Optional[Set[str]] = None,
 ) -> TriageMetrics:
     """Evaluate triage accuracy across multiple documents.
 
@@ -220,6 +221,8 @@ def evaluate_triage_batch(
 
         doc_name = triage_data.get("document", "")
         doc_id = doc_name.replace(".pdf", "")
+        if target_doc_ids is not None and doc_id not in target_doc_ids:
+            continue
 
         table_pages = gt_table_pages.get(doc_id, set())
 

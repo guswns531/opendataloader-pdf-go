@@ -52,32 +52,44 @@ func (p *DocumentProcessor) Process(pdfPath string, config *api.Config) (*entiti
 		config = api.DefaultConfig()
 	}
 
-	doc, err := p.loadDocument(pdfPath, config)
-	if err != nil {
-		return nil, err
-	}
-
 	ctx := containers.NewProcessorContext()
 	ctx.UseStructTree = config.UseStructTree
 	ctx.ImageDir = config.ImageDir
 	ctx.EmbedImages = config.ImageOutput == api.ImageOutputEmbedded
 	ctx.ImageFormat = config.ImageFormat
 
+	doc, err := p.loadDocument(pdfPath, config, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var processed *entities.Document
+	if config.Hybrid != "" && config.Hybrid != api.HybridOff {
+		processed, err = NewHybridDocumentProcessor(p).Process(doc, pdfPath, config, ctx)
+	} else {
+		processed, err = p.processJavaDocument(doc, config, ctx)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.writeOutputs(pdfPath, processed, config); err != nil {
+		return nil, err
+	}
+
+	return processed, nil
+}
+
+func (p *DocumentProcessor) processJavaDocument(doc *entities.Document, config *api.Config, ctx *containers.ProcessorContext) (*entities.Document, error) {
 	var headings []*entities.SemanticHeading
 	apiFilterConfig := api.FilterConfigFromStrings(config.ContentSafetyOff)
-	filterConfig := &FilterConfig{
-		DisableHiddenText: apiFilterConfig.DisableHiddenText,
-		DisableOffPage:    apiFilterConfig.DisableOffPage,
-		DisableTiny:       apiFilterConfig.DisableTiny,
-		DisableHiddenOCG:  apiFilterConfig.DisableHiddenOCG,
-	}
 
 	for _, page := range doc.Pages {
 		if page == nil {
 			continue
 		}
 
-		page.Chunks = FilterContent(page.Chunks, filterConfig, page.Width, page.Height)
+		page.Chunks = FilterContent(page.Chunks, apiFilterConfig, page.Width, page.Height)
 
 		rawElements := make([]entities.IObject, 0, len(page.Elements)+len(page.Chunks))
 		rawElements = append(rawElements, page.Elements...)
@@ -119,20 +131,16 @@ func (p *DocumentProcessor) Process(pdfPath string, config *api.Config) (*entiti
 		page.Elements = sortObjects(pageElements)
 	}
 
+	MergeListsAcrossPages(doc.Pages)
 	(&LevelProcessor{}).Process(headings)
 
 	if config.Sanitize {
 		utils.Sanitize(doc, utils.DefaultRules)
 	}
-
-	if err := p.writeOutputs(pdfPath, doc, config); err != nil {
-		return nil, err
-	}
-
 	return doc, nil
 }
 
-func (p *DocumentProcessor) loadDocument(pdfPath string, config *api.Config) (*entities.Document, error) {
+func (p *DocumentProcessor) loadDocument(pdfPath string, config *api.Config, ctx *containers.ProcessorContext) (*entities.Document, error) {
 	doc, err := pdfbox_loader.Open(pdfPath, config.Password)
 	if err != nil {
 		return nil, err
@@ -171,9 +179,12 @@ func (p *DocumentProcessor) loadDocument(pdfPath string, config *api.Config) (*e
 		if err != nil {
 			return nil, err
 		}
-		images, err := extractor.ExtractImages(doc, pageIdx, config.ImageDir)
-		if err != nil {
-			return nil, err
+		var images []*extractor.ExtractedImage
+		if config.ImageOutput != api.ImageOutputOff {
+			images, err = extractor.ExtractImages(doc, pageIdx, config.ImageDir)
+			if err != nil {
+				return nil, err
+			}
 		}
 		lineArts, err := extractor.ExtractLineArts(doc, pageIdx)
 		if err != nil {
@@ -182,7 +193,7 @@ func (p *DocumentProcessor) loadDocument(pdfPath string, config *api.Config) (*e
 
 		semanticImages := make([]entities.IObject, 0, len(images))
 		for _, image := range images {
-			semanticImages = append(semanticImages, toSemanticImage(image))
+			semanticImages = append(semanticImages, toSemanticImage(image, ctx))
 		}
 
 		out.Pages = append(out.Pages, &entities.Page{
@@ -191,8 +202,8 @@ func (p *DocumentProcessor) loadDocument(pdfPath string, config *api.Config) (*e
 				Width:  page.Width,
 				Height: page.Height,
 			},
-			Chunks:   toTextChunks(textChunks),
-			LineArts: toLineArtChunks(lineArts),
+			Chunks:   toTextChunks(textChunks, ctx),
+			LineArts: toLineArtChunks(lineArts, ctx),
 			Elements: semanticImages,
 		})
 	}
@@ -200,7 +211,7 @@ func (p *DocumentProcessor) loadDocument(pdfPath string, config *api.Config) (*e
 	return out, nil
 }
 
-func toTextChunks(extracted []*extractor.ExtractedText) []*entities.TextChunk {
+func toTextChunks(extracted []*extractor.ExtractedText, ctx *containers.ProcessorContext) []*entities.TextChunk {
 	out := make([]*entities.TextChunk, 0, len(extracted))
 	for _, chunk := range extracted {
 		if chunk == nil {
@@ -208,6 +219,7 @@ func toTextChunks(extracted []*extractor.ExtractedText) []*entities.TextChunk {
 		}
 		out = append(out, &entities.TextChunk{
 			BaseObject: entities.BaseObject{
+				ID: nextObjectID(ctx),
 				BBox: entities.BoundingBox{
 					X:      chunk.X,
 					Y:      chunk.Y,
@@ -231,7 +243,7 @@ func toTextChunks(extracted []*extractor.ExtractedText) []*entities.TextChunk {
 	return out
 }
 
-func toLineArtChunks(extracted []*extractor.ExtractedLineArt) []*entities.LineArtChunk {
+func toLineArtChunks(extracted []*extractor.ExtractedLineArt, ctx *containers.ProcessorContext) []*entities.LineArtChunk {
 	out := make([]*entities.LineArtChunk, 0, len(extracted))
 	for _, line := range extracted {
 		if line == nil {
@@ -239,6 +251,7 @@ func toLineArtChunks(extracted []*extractor.ExtractedLineArt) []*entities.LineAr
 		}
 		out = append(out, &entities.LineArtChunk{
 			BaseObject: entities.BaseObject{
+				ID: nextObjectID(ctx),
 				BBox: entities.BoundingBox{
 					X:      line.X,
 					Y:      line.Y,
@@ -255,12 +268,13 @@ func toLineArtChunks(extracted []*extractor.ExtractedLineArt) []*entities.LineAr
 	return out
 }
 
-func toSemanticImage(image *extractor.ExtractedImage) *entities.SemanticImage {
+func toSemanticImage(image *extractor.ExtractedImage, ctx *containers.ProcessorContext) *entities.SemanticImage {
 	if image == nil {
 		return nil
 	}
 	return &entities.SemanticImage{
 		BaseObject: entities.BaseObject{
+			ID: nextObjectID(ctx),
 			BBox: entities.BoundingBox{
 				X:      image.X,
 				Y:      image.Y,
@@ -311,10 +325,10 @@ func parsePageRange(spec string, totalPages int) ([]int, error) {
 			if start > end {
 				start, end = end, start
 			}
+			if start < 1 || end > totalPages {
+				return nil, fmt.Errorf("page range %q out of bounds (1-%d)", part, totalPages)
+			}
 			for page := start; page <= end; page++ {
-				if page < 1 || page > totalPages {
-					continue
-				}
 				if _, ok := seen[page]; ok {
 					continue
 				}
@@ -329,7 +343,7 @@ func parsePageRange(spec string, totalPages int) ([]int, error) {
 			return nil, fmt.Errorf("invalid page %q", part)
 		}
 		if page < 1 || page > totalPages {
-			continue
+			return nil, fmt.Errorf("page %d out of bounds (1-%d)", page, totalPages)
 		}
 		if _, ok := seen[page]; ok {
 			continue

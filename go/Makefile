@@ -1,4 +1,4 @@
-.PHONY: build test bench sync clean lint check
+.PHONY: build test bench bench-quick bench-debug sync clean lint check
 
 build:
 	go build -o ../bin/opendataloader-pdf ./cmd/opendataloader-pdf/
@@ -6,8 +6,15 @@ build:
 test:
 	go test ./... -v -race
 
-bench:
-	cd .. && python tests/benchmark/run.py
+bench: build
+	cd .. && python3 tests/benchmark/run.py
+
+bench-quick: build
+	cd .. && python3 tests/benchmark/run.py --limit 5
+
+bench-debug: build
+	@echo "Usage: make bench-debug DOC=<doc_id>"
+	cd .. && python3 tests/benchmark/run.py --doc $(DOC) --debug
 
 sync: build
 	../bin/opendataloader-pdf --export-options > ../options.json

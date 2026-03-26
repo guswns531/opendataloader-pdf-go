@@ -2,7 +2,7 @@
 # Benchmark script for opendataloader-pdf
 #
 # Usage:
-#   ./scripts/bench.sh                       # Run full benchmark (Java only)
+#   ./scripts/bench.sh                       # Run full benchmark (Go binary)
 #   ./scripts/bench.sh --doc-id 01030...     # Run for specific document
 #   ./scripts/bench.sh --check-regression    # Run with regression check (CI)
 #   ./scripts/bench.sh --hybrid docling-fast # Run with hybrid mode (requires docling-serve)
@@ -25,12 +25,12 @@ for arg in "$@"; do
     fi
 done
 
-# Build Java if needed
+# Build Go binary if needed
 if [[ "$SKIP_BUILD" == "false" ]]; then
-    echo "Building Java..."
-    "$SCRIPT_DIR/build-java.sh"
+    echo "Building Go binary..."
+    (cd "$PROJECT_ROOT/go" && make build)
 else
-    echo "Skipping Java build..."
+    echo "Skipping Go build..."
 fi
 
 # Install Python dependencies and run benchmark

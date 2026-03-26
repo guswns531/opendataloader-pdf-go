@@ -13,8 +13,11 @@ import (
 
 const (
 	textLineBaselineTolerance = 0.5
-	textLineSpaceRatio        = 0.33
+	textLineSpaceRatio        = 0.3
+	textLineTabRatio          = 2.0
 	listLabelHeightEpsilon    = 1.5
+	lineArtBulletGapMax       = 20.0
+	lineArtBaselineTolerance  = 5.0
 )
 
 type TextLineProcessor struct{}
@@ -29,6 +32,7 @@ func (p *TextLineProcessor) Process(
 		sort.Slice(line.Chunks, func(i, j int) bool {
 			return line.Chunks[i].BBox.X < line.Chunks[j].BBox.X
 		})
+		line.Chunks = addSyntheticSpacing(line.Chunks)
 		rebuildLineGeometry(line)
 	}
 
@@ -82,15 +86,17 @@ func groupTextChunksIntoLines(chunks []*entities.TextChunk, ctx *containers.Proc
 	return lines
 }
 
-func addSyntheticSpaces(chunks []*entities.TextChunk, fontSize float64) []*entities.TextChunk {
+func addSyntheticSpacing(chunks []*entities.TextChunk) []*entities.TextChunk {
 	if len(chunks) <= 1 {
 		return chunks
 	}
 
-	threshold := fontSize * textLineSpaceRatio
-	if threshold <= 0 {
-		threshold = textLineBaselineTolerance
+	avgCharWidth := averageCharWidth(chunks)
+	if avgCharWidth <= 0 {
+		avgCharWidth = textLineBaselineTolerance
 	}
+	spaceThreshold := avgCharWidth * textLineSpaceRatio
+	tabThreshold := avgCharWidth * textLineTabRatio
 
 	result := make([]*entities.TextChunk, 0, len(chunks)*2)
 	result = append(result, chunks[0])
@@ -98,18 +104,23 @@ func addSyntheticSpaces(chunks []*entities.TextChunk, fontSize float64) []*entit
 	for i := 1; i < len(chunks); i++ {
 		current := chunks[i]
 		currentStart := current.BBox.X
-		if currentStart-previousEnd > threshold {
-			spaceBox := entities.BoundingBox{
+		gap := currentStart - previousEnd
+		if gap > spaceThreshold {
+			spacingText := " "
+			if gap > tabThreshold {
+				spacingText = "\t"
+			}
+			spacingBox := entities.BoundingBox{
 				X:      previousEnd,
 				Y:      current.BBox.Y,
-				Width:  currentStart - previousEnd,
+				Width:  gap,
 				Height: current.BBox.Height,
 				Page:   current.BBox.Page,
 			}
 			result = append(result, &entities.TextChunk{
-				BaseObject: entities.BaseObject{BBox: spaceBox},
-				Text:       " ",
-				FontStyle:  entities.FontStyle{FontSize: fontSize},
+				BaseObject: entities.BaseObject{BBox: spacingBox},
+				Text:       spacingText,
+				FontStyle:  entities.FontStyle{FontSize: current.FontStyle.FontSize},
 				Baseline:   current.Baseline,
 			})
 		}
@@ -151,11 +162,14 @@ func isLineConnectedWithLineArt(line *entities.TextLine, lineArt *entities.LineA
 	}
 
 	artRight := lineArt.BBox.X + lineArt.BBox.Width
-	lineMidY := line.BBox.Y + line.BBox.Height/2
-	artMidY := lineArt.BBox.Y + lineArt.BBox.Height/2
+	if artRight > line.BBox.X {
+		return false
+	}
+	if line.BBox.X-artRight > lineArtBulletGapMax {
+		return false
+	}
 
-	return artRight <= line.BBox.X &&
-		math.Abs(lineMidY-artMidY) <= lineHeight &&
+	return math.Abs(line.Baseline-lineArt.BBox.Y) <= lineArtBaselineTolerance &&
 		lineArt.BBox.Height < listLabelHeightEpsilon*lineHeight
 }
 
@@ -186,6 +200,26 @@ func averageFontSize(chunks []*entities.TextChunk) float64 {
 		sum += chunk.FontStyle.FontSize
 	}
 	return sum / float64(len(chunks))
+}
+
+func averageCharWidth(chunks []*entities.TextChunk) float64 {
+	totalWidth := 0.0
+	totalChars := 0
+	for _, chunk := range chunks {
+		if chunk == nil {
+			continue
+		}
+		runes := []rune(chunk.Text)
+		if len(runes) == 0 {
+			continue
+		}
+		totalWidth += chunk.BBox.Width
+		totalChars += len(runes)
+	}
+	if totalChars == 0 {
+		return averageFontSize(chunks) * 0.5
+	}
+	return totalWidth / float64(totalChars)
 }
 
 func unionBoundingBox(a, b entities.BoundingBox) entities.BoundingBox {

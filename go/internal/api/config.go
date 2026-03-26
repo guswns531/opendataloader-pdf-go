@@ -27,6 +27,12 @@ const (
 	ImageOutputEmbedded = "embedded"
 	ImageOutputExternal = "external"
 
+	ContentSafetyAll        = "all"
+	ContentSafetyHiddenText = "hidden-text"
+	ContentSafetyOffPage    = "off-page"
+	ContentSafetyTiny       = "tiny"
+	ContentSafetyHiddenOCG  = "hidden-ocg"
+
 	FormatJSON               = "json"
 	FormatText               = "text"
 	FormatHTML               = "html"
@@ -66,7 +72,7 @@ type Config struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		Formats:             []string{FormatMarkdown},
+		Formats:             []string{FormatJSON},
 		ReplaceInvalidChars: " ",
 		TableMethod:         TableMethodDefault,
 		ReadingOrder:        ReadingOrderXYCut,

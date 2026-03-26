@@ -19,7 +19,7 @@ const (
 	overlapThreshold        = 0.1
 	minOverlapCount         = 2
 	minGapThreshold         = 5.0
-	defaultMinWidthRatio    = 0.1
+	defaultMinWidthRatio    = 0.05
 	columnMinObjectCount    = 4
 	columnMinRegionRatio    = 0.20
 	columnMaxRegionRatio    = 0.80

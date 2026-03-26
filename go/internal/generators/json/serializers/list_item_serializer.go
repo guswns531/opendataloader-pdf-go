@@ -15,6 +15,7 @@
 package serializers
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
@@ -32,7 +33,7 @@ func SerializeListItem(item *entities.ListItem) map[string]interface{} {
 	}
 	out[jsonKids] = serializeElements(item.Content)
 	if item.Level > 0 {
-		out[jsonLevel] = item.Level
+		out[jsonLevel] = strconv.Itoa(item.Level)
 	}
 	return out
 }

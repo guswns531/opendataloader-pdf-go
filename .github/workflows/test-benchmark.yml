@@ -4,7 +4,11 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'go/**'
       - 'java/**'
+      - 'python/**'
+      - 'node/**'
+      - 'options.json'
       - 'tests/benchmark/**'
   workflow_dispatch:
 
@@ -27,6 +31,12 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: go/go.sum
+
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
 
@@ -37,6 +47,19 @@ jobs:
 
       - name: Setup pnpm
         run: npm install -g pnpm
+
+      - name: Build Go binary
+        run: |
+          cd go && make build
+
+      - name: Run Go unit tests
+        run: |
+          cd go && go test ./... -race -timeout 5m
+
+      - name: Sync options
+        run: |
+          cd go && make sync
+          git diff --exit-code options.json
 
       - name: Build & Test All
         run: ./scripts/build-all.sh
@@ -51,8 +74,8 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: java-build
-          path: java/opendataloader-pdf-cli/target/*.jar
+          name: go-build
+          path: bin/opendataloader-pdf
           retention-days: 1
 
   benchmark:
@@ -64,17 +87,17 @@ jobs:
         with:
           lfs: true
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          distribution: 'temurin'
-          java-version: '21'
+          go-version: '1.22'
+          cache-dependency-path: go/go.sum
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: java-build
-          path: java/opendataloader-pdf-cli/target/
+          name: go-build
+          path: bin/
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v4

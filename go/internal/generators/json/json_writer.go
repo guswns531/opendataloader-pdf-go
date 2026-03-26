@@ -28,7 +28,13 @@ type JsonWriter struct {
 func (w *JsonWriter) Write(doc *entities.Document) ([]byte, error) {
 	if doc == nil {
 		return gojson.Marshal(map[string]interface{}{
-			Kids: []interface{}{},
+			FileName:         "",
+			NumberOfPages:    0,
+			Author:           nil,
+			Title:            nil,
+			CreationDate:     nil,
+			ModificationDate: nil,
+			Kids:             []interface{}{},
 		})
 	}
 
@@ -69,7 +75,9 @@ func (w *JsonWriter) serializeElements(elements []entities.IObject) []interface{
 		case *entities.SemanticCaption:
 			out = append(out, serializers.SerializeCaption(typed))
 		case *entities.TextChunk:
-			out = append(out, serializers.SerializeTextChunk(typed))
+			out = append(out, serializers.SerializeTextChunkContentElement(typed))
+		case *entities.TextLine:
+			out = append(out, serializers.SerializeTextLineContentElement(typed))
 		case *entities.SemanticHeaderFooter:
 			out = append(out, serializers.SerializeHeaderFooter(typed))
 		}
@@ -94,8 +102,17 @@ func (w *JsonWriter) serializePages(pages []*entities.Page) []interface{} {
 }
 
 func serializeMetadata(metadata entities.DocumentMetadata) map[string]interface{} {
+	fileName := ""
+	if metadata.Title != "" {
+		fileName = metadata.Title
+	}
 	out := map[string]interface{}{
-		NumberOfPages: metadata.PageCount,
+		FileName:         fileName,
+		NumberOfPages:    metadata.PageCount,
+		Author:           nil,
+		Title:            nil,
+		CreationDate:     nil,
+		ModificationDate: nil,
 	}
 	if metadata.Author != "" {
 		out[Author] = metadata.Author

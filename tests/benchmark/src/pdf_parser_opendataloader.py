@@ -29,13 +29,14 @@ def _find_local_binary() -> Path:
     )
 
 
-def to_markdown(_, input_path, output_dir):
+def to_markdown(document_paths, input_path, output_dir):
     """Convert PDF to Markdown using local Go binary."""
     binary_path = _find_local_binary()
+    inputs = [str(path) for path in document_paths] if document_paths else [str(input_path)]
 
     command = [
         str(binary_path),
-        str(input_path),
+        *inputs,
         "--output-dir", str(output_dir),
         "--format", "markdown",
         "--table-method", "cluster",

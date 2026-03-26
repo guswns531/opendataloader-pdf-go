@@ -343,7 +343,7 @@ func assignToCell(table detectedTable, box entities.BoundingBox) (int, int, bool
 func filterNestedLineArts(lineArts []*entities.LineArtChunk, outer entities.BoundingBox) []*entities.LineArtChunk {
 	result := make([]*entities.LineArtChunk, 0)
 	for _, line := range lineArts {
-		if bboxContains(outer, line.GetBBox()) && !sameBBox(outer, line.GetBBox()) {
+		if bboxStrictlyContains(outer, line.GetBBox()) {
 			result = append(result, line)
 		}
 	}
@@ -353,11 +353,21 @@ func filterNestedLineArts(lineArts []*entities.LineArtChunk, outer entities.Boun
 func filterLineArtsForCell(lineArts []*entities.LineArtChunk, cell entities.BoundingBox) []*entities.LineArtChunk {
 	result := make([]*entities.LineArtChunk, 0)
 	for _, line := range lineArts {
-		if bboxContains(cell, line.GetBBox()) && !sameBBox(cell, line.GetBBox()) {
+		if bboxStrictlyContains(cell, line.GetBBox()) {
 			result = append(result, line)
 		}
 	}
 	return result
+}
+
+func bboxStrictlyContains(outer, inner entities.BoundingBox) bool {
+	if outer.Page != inner.Page {
+		return false
+	}
+	return bboxLeft(inner) > bboxLeft(outer)+tableAlignmentTolerance &&
+		bboxRight(inner) < bboxRight(outer)-tableAlignmentTolerance &&
+		bboxBottom(inner) > bboxBottom(outer)+tableAlignmentTolerance &&
+		bboxTop(inner) < bboxTop(outer)-tableAlignmentTolerance
 }
 
 func sameBBox(a, b entities.BoundingBox) bool {

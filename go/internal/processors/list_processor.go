@@ -56,13 +56,38 @@ func (p *ListProcessor) Process(elements []entities.IObject, ctx *containers.Pro
 			i = next
 		}
 
-		if len(list.Items) == 1 {
-			out = append(out, list.Items[0].Content...)
-			continue
-		}
 		out = append(out, list)
 	}
 	return out
+}
+
+func MergeListsAcrossPages(pages []*entities.Page) {
+	if len(pages) < 2 {
+		return
+	}
+
+	for idx := 1; idx < len(pages); idx++ {
+		prev := pages[idx-1]
+		curr := pages[idx]
+		if prev == nil || curr == nil {
+			continue
+		}
+
+		prevList, prevPos := trailingList(prev.Elements)
+		currList, currPos := leadingList(curr.Elements)
+		if prevList == nil || currList == nil {
+			continue
+		}
+		if !sameListPattern(prevList, currList) {
+			continue
+		}
+
+		prevList.Items = append(prevList.Items, currList.Items...)
+		curr.Elements = append(append([]entities.IObject{}, curr.Elements[:currPos]...), curr.Elements[currPos+1:]...)
+		if prevPos >= 0 {
+			prev.Elements[prevPos] = prevList
+		}
+	}
 }
 
 func (p *ListProcessor) consumeListItem(elements []entities.IObject, start int, isOrdered bool, ctx *containers.ProcessorContext) (*entities.ListItem, int) {
@@ -122,6 +147,55 @@ func isBulletLine(line *entities.TextLine) bool {
 		return true
 	}
 	return utils.IsOrderedBullet(text) || utils.IsUnorderedBullet(text) || line.LineArtBullet != nil || koreanAttachPattern.MatchString(text)
+}
+
+func trailingList(elements []entities.IObject) (*entities.PDFList, int) {
+	for i := len(elements) - 1; i >= 0; i-- {
+		if list, ok := elements[i].(*entities.PDFList); ok {
+			return list, i
+		}
+	}
+	return nil, -1
+}
+
+func leadingList(elements []entities.IObject) (*entities.PDFList, int) {
+	for i, element := range elements {
+		if list, ok := element.(*entities.PDFList); ok {
+			return list, i
+		}
+	}
+	return nil, -1
+}
+
+func sameListPattern(left, right *entities.PDFList) bool {
+	if left == nil || right == nil || left.IsOrdered != right.IsOrdered {
+		return false
+	}
+	if len(left.Items) == 0 || len(right.Items) == 0 {
+		return false
+	}
+	return bulletPatternKey(left.Items[0].BulletText, left.IsOrdered) == bulletPatternKey(right.Items[0].BulletText, right.IsOrdered)
+}
+
+func bulletPatternKey(text string, ordered bool) string {
+	value := strings.TrimSpace(text)
+	switch {
+	case ordered:
+		switch {
+		case regexp.MustCompile(`^\(?\d+[\.\)]?$`).MatchString(value):
+			return "ordered-numeric"
+		case regexp.MustCompile(`^[A-Za-z][\.\)]?$`).MatchString(value):
+			return "ordered-alpha"
+		default:
+			return "ordered-other"
+		}
+	default:
+		if value == "" {
+			return "unordered-empty"
+		}
+		r := []rune(value)
+		return "unordered-" + string(r[0])
+	}
 }
 
 func splitBulletText(text string) (string, string) {

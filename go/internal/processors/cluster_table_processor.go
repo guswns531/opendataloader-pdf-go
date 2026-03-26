@@ -13,6 +13,7 @@ import (
 const (
 	clusterRowTolerance = 6.0
 	clusterGapTolerance = 24.0
+	clusterMinPoints    = 2
 )
 
 type ClusterTableProcessor struct {
@@ -75,7 +76,7 @@ func dbscanTextClusters(chunks []*entities.TextChunk) [][]*entities.TextChunk {
 		}
 		visited[idx] = true
 		neighbors := clusterNeighbors(chunks, idx)
-		if len(neighbors) < 3 {
+		if len(neighbors) < clusterMinPoints {
 			continue
 		}
 		cluster := []*entities.TextChunk{chunks[idx]}
@@ -86,7 +87,7 @@ func dbscanTextClusters(chunks []*entities.TextChunk) [][]*entities.TextChunk {
 			if !visited[current] {
 				visited[current] = true
 				more := clusterNeighbors(chunks, current)
-				if len(more) >= 3 {
+				if len(more) >= clusterMinPoints {
 					queue = append(queue, more...)
 				}
 			}
@@ -102,13 +103,22 @@ func dbscanTextClusters(chunks []*entities.TextChunk) [][]*entities.TextChunk {
 func clusterNeighbors(chunks []*entities.TextChunk, index int) []int {
 	neighbors := make([]int, 0)
 	source := chunks[index]
+	epsilon := source.GetBBox().Height * 0.5
+	if epsilon <= 0 {
+		epsilon = clusterRowTolerance
+	}
 	for idx, chunk := range chunks {
 		if idx == index || source.GetBBox().Page != chunk.GetBBox().Page {
 			continue
 		}
-		if areClose(source.Baseline, chunk.Baseline, clusterRowTolerance) ||
-			(source.GetBBox().X <= chunk.GetBBox().X && chunk.GetBBox().X-bboxRight(source.GetBBox()) <= clusterGapTolerance &&
-				areClose(source.GetBBox().Y, chunk.GetBBox().Y, clusterRowTolerance)) {
+		rowTolerance := max(clusterRowTolerance, epsilon)
+		sameRow := areClose(source.Baseline, chunk.Baseline, rowTolerance)
+		sameColumn := areClose(source.GetBBox().X, chunk.GetBBox().X, clusterGapTolerance)
+		horizontalGap := chunk.GetBBox().X - bboxRight(source.GetBBox())
+		closeHorizontalNeighbor := source.GetBBox().X <= chunk.GetBBox().X &&
+			horizontalGap <= clusterGapTolerance &&
+			areClose(source.GetBBox().Y, chunk.GetBBox().Y, rowTolerance)
+		if sameRow || sameColumn || closeHorizontalNeighbor {
 			neighbors = append(neighbors, idx)
 		}
 	}

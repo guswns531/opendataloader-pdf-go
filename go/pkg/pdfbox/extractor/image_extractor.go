@@ -40,6 +40,9 @@ func ExtractImages(doc *model.PDDocument, pageIdx int, outputDir string) ([]*Ext
 
 	imagesByObj, err := pdfcpu.ExtractPageImages(doc.Context, page.Number, false)
 	if err != nil {
+		if isUnsupportedImageMaskError(err) {
+			return []*ExtractedImage{}, nil
+		}
 		return nil, err
 	}
 
@@ -69,7 +72,7 @@ func ExtractImages(doc *model.PDDocument, pageIdx int, outputDir string) ([]*Ext
 		entry := &ExtractedImage{
 			Data:   data,
 			Format: normalizeImageFormat(img.FileType),
-			Page:   page.Number,
+			Page:   pageIdx,
 		}
 
 		if outputDir != "" && len(data) > 0 {
@@ -186,4 +189,11 @@ func sanitizeResourceName(v string) string {
 		}
 	}
 	return b.String()
+}
+
+func isUnsupportedImageMaskError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "entry=ColorSpace missing")
 }

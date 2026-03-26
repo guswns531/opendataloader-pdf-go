@@ -28,6 +28,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/api"
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/generators/markdown"
@@ -115,7 +116,7 @@ func TestEndToEnd(t *testing.T) {
 	outputDir := t.TempDir()
 	cfg := api.DefaultConfig()
 	cfg.OutputDir = outputDir
-	cfg.Formats = []string{api.FormatMarkdown, api.FormatJSON}
+	cfg.Formats = []string{api.FormatMarkdown, api.FormatJSON, api.FormatHTML}
 	cfg.ContentSafetyOff = []string{"all"}
 
 	fixturePDF := writeTestPDF(t)
@@ -125,10 +126,17 @@ func TestEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 
 	textChunkCount := 0
+	nonEmptyChunkIDs := 0
 	for _, page := range doc.Pages {
 		textChunkCount += len(page.Chunks)
+		for _, chunk := range page.Chunks {
+			if chunk != nil && chunk.ID != "" {
+				nonEmptyChunkIDs++
+			}
+		}
 	}
 	t.Logf("extracted text chunk count: %d", textChunkCount)
+	assert.Greater(t, nonEmptyChunkIDs, 0)
 
 	markdownOutput, err := markdown.NewMarkdownGenerator(cfg, false, false).Generate(doc)
 	require.NoError(t, err)
@@ -138,10 +146,26 @@ func TestEndToEnd(t *testing.T) {
 	mdPath := filepath.Join(outputDir, base+".md")
 	assert.FileExists(t, mdPath)
 	assert.FileExists(t, filepath.Join(outputDir, base+".json"))
+	assert.FileExists(t, filepath.Join(outputDir, base+".html"))
 
 	markdownBytes, err := os.ReadFile(mdPath)
 	require.NoError(t, err)
 	assert.NotEmpty(t, strings.TrimSpace(string(markdownBytes)))
+
+	jsonPath := filepath.Join(outputDir, base+".json")
+	jsonBytes, err := os.ReadFile(jsonPath)
+	require.NoError(t, err)
+
+	schemaPath := filepath.Join("..", "..", "..", "schema.json")
+	schemaBytes, err := os.ReadFile(schemaPath)
+	require.NoError(t, err)
+
+	schemaResult, err := gojsonschema.Validate(
+		gojsonschema.NewBytesLoader(schemaBytes),
+		gojsonschema.NewBytesLoader(jsonBytes),
+	)
+	require.NoError(t, err)
+	assert.Truef(t, schemaResult.Valid(), "schema errors: %v", schemaResult.Errors())
 
 	sampleOutputDir := t.TempDir()
 	sampleCfg := api.DefaultConfig()

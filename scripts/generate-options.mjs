@@ -57,6 +57,47 @@ function isListOption(opt) {
   return LIST_OPTIONS.has(opt.name);
 }
 
+function optionTakesValue(opt) {
+  return opt.type !== 'boolean';
+}
+
+function isIntegerOption(opt) {
+  return opt.type === 'integer';
+}
+
+function pythonDefaultLiteral(value) {
+  if (value === null || value === undefined) {
+    return 'None';
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'True' : 'False';
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((v) => `"${escapeString(String(v), '"')}"`).join(', ')}]`;
+  }
+  if (typeof value === 'number') {
+    return String(value);
+  }
+  return `"${escapeString(String(value), '"')}"`;
+}
+
+function docDefaultValue(value) {
+  if (value === null || value === undefined) {
+    return '-';
+  }
+  if (typeof value === 'boolean') {
+    return `\`${value}\``;
+  }
+  if (Array.isArray(value)) {
+    return value.length === 0 ? '-'
+      : value.map((v) => `\`${String(v)}\``).join(', ');
+  }
+  if (typeof value === 'number') {
+    return `\`${value}\``;
+  }
+  return `\`"${String(value)}"\``;
+}
+
 /**
  * Escape string for use in generated code.
  * @param {string} str - The string to escape
@@ -91,8 +132,8 @@ function generateNodeCliOptions() {
 
   for (const opt of options.options) {
     const flags = opt.shortName
-      ? `-${opt.shortName}, --${opt.name}${opt.type === 'string' ? ' <value>' : ''}`
-      : `--${opt.name}${opt.type === 'string' ? ' <value>' : ''}`;
+      ? `-${opt.shortName}, --${opt.name}${optionTakesValue(opt) ? ' <value>' : ''}`
+      : `--${opt.name}${optionTakesValue(opt) ? ' <value>' : ''}`;
 
     const description = escapeString(opt.description, "'");
     lines.push(`  program.option('${flags}', '${description}');`);
@@ -124,6 +165,8 @@ function generateNodeConvertOptions() {
 
     if (opt.type === 'boolean') {
       tsType = 'boolean';
+    } else if (isIntegerOption(opt)) {
+      tsType = 'number';
     } else if (isListOption(opt)) {
       tsType = 'string | string[]';
     }
@@ -143,7 +186,7 @@ function generateNodeConvertOptions() {
 
   for (const opt of options.options) {
     const camelName = toCamelCase(opt.name);
-    const tsType = opt.type === 'boolean' ? 'boolean' : 'string';
+    const tsType = opt.type === 'boolean' ? 'boolean' : isIntegerOption(opt) ? 'number | string' : 'string';
     lines.push(`  ${camelName}?: ${tsType};`);
   }
 
@@ -204,7 +247,7 @@ function generateNodeConvertOptions() {
       lines.push('  }');
     } else {
       lines.push(`  if (options.${camelName}) {`);
-      lines.push(`    args.push('${cliFlag}', options.${camelName});`);
+      lines.push(`    args.push('${cliFlag}', String(options.${camelName}));`);
       lines.push('  }');
     }
   }
@@ -235,9 +278,7 @@ function generatePythonCliOptions() {
 
   for (const opt of options.options) {
     const snakeName = toSnakeCase(opt.name);
-    const defaultValue = opt.default === null ? 'None'
-      : typeof opt.default === 'boolean' ? (opt.default ? 'True' : 'False')
-      : `"${opt.default}"`;
+    const defaultValue = pythonDefaultLiteral(opt.default);
 
     lines.push('    {');
     lines.push(`        "name": "${opt.name}",`);
@@ -302,6 +343,9 @@ function generatePythonConvert() {
     if (opt.type === 'boolean') {
       typeHint = 'bool';
       defaultVal = opt.default ? 'True' : 'False';
+    } else if (isIntegerOption(opt)) {
+      typeHint = 'Optional[int]';
+      defaultVal = opt.default === null || opt.default === undefined ? 'None' : String(opt.default);
     } else if (isListOption(opt)) {
       typeHint = 'Optional[Union[str, List[str]]]';
       defaultVal = 'None';
@@ -354,7 +398,7 @@ function generatePythonConvert() {
       lines.push(`            args.extend(["${cliFlag}", ${snakeName}])`);
     } else {
       lines.push(`    if ${snakeName}:`);
-      lines.push(`        args.extend(["${cliFlag}", ${snakeName}])`);
+      lines.push(`        args.extend(["${cliFlag}", str(${snakeName})])`);
     }
   }
 
@@ -391,13 +435,13 @@ function generatePythonConvertOptionsMdx() {
     let pyType = 'str';
     if (opt.type === 'boolean') {
       pyType = 'bool';
+    } else if (isIntegerOption(opt)) {
+      pyType = 'int';
     } else if (isListOption(opt)) {
       pyType = String.raw`str \| list[str]`;
     }
 
-    const defaultVal = opt.default === null ? '-'
-      : typeof opt.default === 'boolean' ? (opt.default ? '`True`' : '`False`')
-      : `\`"${opt.default}"\``;
+    const defaultVal = docDefaultValue(opt.default);
 
     const description = escapeMarkdown(opt.description);
     rows.push([`\`${snakeName}\``, `\`${pyType}\``, defaultVal, description]);
@@ -432,13 +476,13 @@ function generateNodeConvertOptionsMdx() {
     let tsType = 'string';
     if (opt.type === 'boolean') {
       tsType = 'boolean';
+    } else if (isIntegerOption(opt)) {
+      tsType = 'number';
     } else if (isListOption(opt)) {
       tsType = String.raw`string \| string[]`;
     }
 
-    const defaultVal = opt.default === null ? '-'
-      : typeof opt.default === 'boolean' ? `\`${opt.default}\``
-      : `\`"${opt.default}"\``;
+    const defaultVal = docDefaultValue(opt.default);
 
     const description = escapeMarkdown(opt.description);
     rows.push([`\`${camelName}\``, `\`${tsType}\``, defaultVal, description]);
@@ -464,9 +508,7 @@ function generateOptionsReferenceMdx() {
     const longOpt = `\`--${opt.name}\``;
     const shortOpt = opt.shortName ? `\`-${opt.shortName}\`` : '-';
     const type = `\`${opt.type}\``;
-    const defaultVal = opt.default === null ? '-'
-      : typeof opt.default === 'boolean' ? `\`${opt.default}\``
-      : `\`"${opt.default}"\``;
+    const defaultVal = docDefaultValue(opt.default);
     const description = escapeMarkdown(opt.description);
 
     rows.push([longOpt, shortOpt, type, defaultVal, description]);

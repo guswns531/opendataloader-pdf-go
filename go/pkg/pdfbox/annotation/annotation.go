@@ -25,6 +25,7 @@ type SquareAnnotation struct {
 	Opacity  float64
 	Contents string
 	OCGRef   int
+	LayerRef int
 }
 
 // AddSquareAnnotation adds a colored square annotation to a PDF page.
@@ -35,7 +36,7 @@ func AddSquareAnnotation(ctx *pdfcpu_model.Context, pageIdx int, ann *SquareAnno
 	if ann == nil {
 		return fmt.Errorf("annotation: nil square annotation")
 	}
-	if pageIdx < 0 || pageIdx >= ctx.PageCount {
+	if pageIdx < 0 {
 		return fmt.Errorf("annotation: page index out of range: %d", pageIdx)
 	}
 
@@ -87,8 +88,12 @@ func AddSquareAnnotation(ctx *pdfcpu_model.Context, pageIdx int, ann *SquareAnno
 		return err
 	}
 
-	if ann.OCGRef > 0 {
-		dict.Update("OC", *types.NewIndirectRef(ann.OCGRef, 0))
+	layerRef := ann.OCGRef
+	if layerRef == 0 {
+		layerRef = ann.LayerRef
+	}
+	if layerRef > 0 {
+		dict.Update("OC", *types.NewIndirectRef(layerRef, 0))
 	}
 
 	return nil

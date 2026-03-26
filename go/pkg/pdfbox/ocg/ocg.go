@@ -15,10 +15,13 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 )
 
-type OCGEntry struct {
-	Name string
-	Ref  int
+type OptionalContentGroup struct {
+	Name    string
+	Visible bool
+	Ref     int
 }
+
+type OCGEntry = OptionalContentGroup
 
 // SetupOCProperties initializes /OCProperties if not present.
 func SetupOCProperties(ctx *pdfcpu_model.Context) error {
@@ -53,7 +56,7 @@ func SetupOCProperties(ctx *pdfcpu_model.Context) error {
 }
 
 // AddOCG adds an OCG to /Catalog /OCProperties.
-func AddOCG(ctx *pdfcpu_model.Context, name string) (*OCGEntry, error) {
+func AddOCG(ctx *pdfcpu_model.Context, name string) (*OptionalContentGroup, error) {
 	if err := SetupOCProperties(ctx); err != nil {
 		return nil, err
 	}
@@ -148,7 +151,60 @@ func AddOCG(ctx *pdfcpu_model.Context, name string) (*OCGEntry, error) {
 		})
 	}
 
-	return &OCGEntry{Name: name, Ref: indRef.ObjectNumber.Value()}, nil
+	return &OptionalContentGroup{Name: name, Visible: true, Ref: indRef.ObjectNumber.Value()}, nil
+}
+
+func EnableOCG(ctx *pdfcpu_model.Context, group *OptionalContentGroup, enabled bool) error {
+	if ctx == nil {
+		return fmt.Errorf("ocg: nil pdf context")
+	}
+	if group == nil {
+		return fmt.Errorf("ocg: nil optional content group")
+	}
+
+	rootDict, err := ctx.Catalog()
+	if err != nil {
+		return err
+	}
+
+	ocPropsObj, found := rootDict.Find("OCProperties")
+	if !found {
+		return fmt.Errorf("ocg: OCProperties missing")
+	}
+	ocPropsDict, err := ctx.DereferenceDict(ocPropsObj)
+	if err != nil {
+		return err
+	}
+
+	dObj, found := ocPropsDict.Find("D")
+	if !found {
+		return fmt.Errorf("ocg: default OCG config missing")
+	}
+	dict, err := ctx.DereferenceDict(dObj)
+	if err != nil {
+		return err
+	}
+
+	on, err := arrayEntry(ctx, dict, "ON")
+	if err != nil {
+		return err
+	}
+
+	targetRef := *types.NewIndirectRef(group.Ref, 0)
+	filtered := make(types.Array, 0, len(on))
+	for _, obj := range on {
+		indRef, ok := obj.(types.IndirectRef)
+		if ok && indRef.ObjectNumber.Value() == group.Ref {
+			continue
+		}
+		filtered = append(filtered, obj)
+	}
+	if enabled {
+		filtered = append(filtered, targetRef)
+	}
+	dict.Update("ON", filtered)
+	group.Visible = enabled
+	return nil
 }
 
 func arrayEntry(ctx *pdfcpu_model.Context, dict types.Dict, key string) (types.Array, error) {

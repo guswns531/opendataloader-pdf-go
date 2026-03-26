@@ -108,6 +108,13 @@ func (c *DoclingFastServerClient) Convert(request *ConvertRequest) (*ConvertResp
 	if err != nil {
 		return &ConvertResponse{Error: err}, err
 	}
+	if len(request.PageNums) == len(pages) {
+		for idx, pageNum := range request.PageNums {
+			if pages[idx] != nil {
+				pages[idx].Number = pageNum - 1
+			}
+		}
+	}
 
 	return &ConvertResponse{Pages: pages}, nil
 }

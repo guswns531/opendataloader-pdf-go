@@ -1,6 +1,7 @@
-"""Custom build hook for hatch to copy JAR and license files."""
+"""Custom build hook for hatch to copy the Go binary and license files."""
 
-import glob
+import os
+import platform
 import shutil
 from pathlib import Path
 
@@ -11,8 +12,11 @@ class CustomBuildHook(BuildHookInterface):
     def initialize(self, version, build_data):
         root_dir = Path(self.root)
         pkg_dir = root_dir / "src/opendataloader_pdf"
-        dest_jar_dir = pkg_dir / "jar"
-        dest_jar_path = dest_jar_dir / "opendataloader-pdf-cli.jar"
+        binary_name = (
+            "opendataloader-pdf.exe" if platform.system() == "Windows" else "opendataloader-pdf"
+        )
+        dest_bin_dir = pkg_dir / "bin"
+        dest_bin_path = dest_bin_dir / binary_name
         license_path = pkg_dir / "LICENSE"
         notice_path = pkg_dir / "NOTICE"
         third_party_dest = pkg_dir / "THIRD_PARTY"
@@ -21,7 +25,7 @@ class CustomBuildHook(BuildHookInterface):
 
         # Check if all required files already exist (building from sdist)
         if (
-            dest_jar_path.exists()
+            dest_bin_path.exists()
             and license_path.exists()
             and notice_path.exists()
             and third_party_dest.exists()
@@ -30,27 +34,34 @@ class CustomBuildHook(BuildHookInterface):
             print("All required files already exist (building from sdist), skipping copy")
             return
 
-        # --- Copy JAR ---
+        # --- Copy Go binary ---
         print(f"Root DIR: {root_dir}")
-        source_jar_glob = str(
-            root_dir / "../../java/opendataloader-pdf-cli/target/opendataloader-pdf-cli-*.jar"
-        )
-        resolved_glob_path = Path(source_jar_glob).resolve()
-        print(f"Searching for JAR file in: {resolved_glob_path}")
-
-        source_jar_paths = glob.glob(source_jar_glob)
-        if not source_jar_paths:
+        env_binary = os.environ.get("OPENDATALOADER_PDF_BIN")
+        candidate_paths = [
+            Path(env_binary) if env_binary else None,
+            (root_dir / "../../bin" / binary_name),
+            (root_dir / "../../go" / binary_name),
+        ]
+        source_binary_path = None
+        for candidate in candidate_paths:
+            if candidate and candidate.exists() and candidate.is_file():
+                source_binary_path = candidate.resolve()
+                break
+        if source_binary_path is None:
+            searched = [str(p.resolve()) for p in candidate_paths if p is not None]
             raise RuntimeError(
-                f"Could not find the JAR file. Please run 'mvn package' in the 'java/' directory first. Searched in: {resolved_glob_path}"
+                "Could not find the opendataloader-pdf binary. "
+                "Set OPENDATALOADER_PDF_BIN or run "
+                "`cd go && go build -o ../bin/opendataloader-pdf ./cmd/opendataloader-pdf/` first. "
+                f"Searched: {searched}"
             )
-        if len(source_jar_paths) > 1:
-            raise RuntimeError(f"Found multiple JAR files, expected one: {source_jar_paths}")
-        source_jar_path = source_jar_paths[0]
-        print(f"Found source JAR: {source_jar_path}")
 
-        dest_jar_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Copying JAR to {dest_jar_path}")
-        shutil.copy(source_jar_path, dest_jar_path)
+        print(f"Found source binary: {source_binary_path}")
+
+        dest_bin_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Copying binary to {dest_bin_path}")
+        shutil.copy(source_binary_path, dest_bin_path)
+        dest_bin_path.chmod(0o755)
 
         # --- Copy LICENSE, NOTICE, README ---
         shutil.copy(root_dir / "../../LICENSE", license_path)

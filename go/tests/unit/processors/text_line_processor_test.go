@@ -43,6 +43,29 @@ func TestTextLineProcessorSeparatesDifferentBaselines(t *testing.T) {
 	assert.Equal(t, "Bottom", lines[1].GetText())
 }
 
+func TestTextLineProcessorInsertsSpaceAndLinksLineArtBullet(t *testing.T) {
+	processor := &processors.TextLineProcessor{}
+	ctx := containers.NewProcessorContext()
+	chunks := []*entities.TextChunk{
+		newTextChunk("Item", 40, 100, 24, 10, 12, 100),
+		newTextChunk("one", 70, 100, 18, 10, 12, 100),
+	}
+	lineArts := []*entities.LineArtChunk{
+		{
+			BaseObject: entities.BaseObject{
+				BBox: entities.BoundingBox{X: 28, Y: 100, Width: 8, Height: 4},
+			},
+			IsHorizontal: true,
+		},
+	}
+
+	lines := processor.Process(chunks, lineArts, ctx)
+
+	assert.Len(t, lines, 1)
+	assert.Equal(t, "Item one", lines[0].GetText())
+	assert.NotNil(t, lines[0].LineArtBullet)
+}
+
 func newTextChunk(text string, x, y, width, height, fontSize, baseline float64) *entities.TextChunk {
 	return &entities.TextChunk{
 		BaseObject: entities.BaseObject{

@@ -4,6 +4,7 @@
 package processors
 
 import (
+	"github.com/opendataloader-project/opendataloader-pdf-go/internal/api"
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
 )
 
@@ -11,14 +12,7 @@ const tinyTextThreshold = 1.0
 
 type ContentFilterProcessor struct{}
 
-type FilterConfig struct {
-	DisableHiddenText bool
-	DisableOffPage    bool
-	DisableTiny       bool
-	DisableHiddenOCG  bool
-}
-
-func FilterContent(chunks []*entities.TextChunk, config *FilterConfig, pageWidth, pageHeight float64) []*entities.TextChunk {
+func FilterContent(chunks []*entities.TextChunk, config *api.FilterConfig, pageWidth, pageHeight float64) []*entities.TextChunk {
 	filtered := make([]*entities.TextChunk, 0, len(chunks))
 	for _, chunk := range chunks {
 		if chunk == nil {
@@ -44,19 +38,19 @@ func FilterContent(chunks []*entities.TextChunk, config *FilterConfig, pageWidth
 	return filtered
 }
 
-func shouldFilterHiddenText(config *FilterConfig) bool {
+func shouldFilterHiddenText(config *api.FilterConfig) bool {
 	return config == nil || !config.DisableHiddenText
 }
 
-func shouldFilterHiddenOCG(config *FilterConfig) bool {
+func shouldFilterHiddenOCG(config *api.FilterConfig) bool {
 	return config == nil || !config.DisableHiddenOCG
 }
 
-func shouldFilterTinyText(config *FilterConfig) bool {
+func shouldFilterTinyText(config *api.FilterConfig) bool {
 	return config == nil || !config.DisableTiny
 }
 
-func shouldFilterOffPage(config *FilterConfig) bool {
+func shouldFilterOffPage(config *api.FilterConfig) bool {
 	return config == nil || !config.DisableOffPage
 }
 

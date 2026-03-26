@@ -22,12 +22,12 @@ import (
 )
 
 type PDFWriter struct {
-	optionalContents map[PDFLayer]*ocg.OCGEntry
+	optionalContents map[PDFLayer]*ocg.OptionalContentGroup
 }
 
 func NewPDFWriter() *PDFWriter {
 	return &PDFWriter{
-		optionalContents: make(map[PDFLayer]*ocg.OCGEntry),
+		optionalContents: make(map[PDFLayer]*ocg.OptionalContentGroup),
 	}
 }
 
@@ -213,7 +213,7 @@ func (w *PDFWriter) drawListItems(ctx *pdfcpu_model.Context, pageIdx int, list *
 	return nil
 }
 
-func (w *PDFWriter) getOptionalContent(ctx *pdfcpu_model.Context, layer PDFLayer) (*ocg.OCGEntry, error) {
+func (w *PDFWriter) getOptionalContent(ctx *pdfcpu_model.Context, layer PDFLayer) (*ocg.OptionalContentGroup, error) {
 	if entry, ok := w.optionalContents[layer]; ok {
 		return entry, nil
 	}

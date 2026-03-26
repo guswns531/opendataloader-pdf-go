@@ -8,6 +8,8 @@
 
 package wcag
 
+import "github.com/opendataloader-project/opendataloader-pdf-go/pkg/verapdf/pdfbox"
+
 type WCAGCriterion string
 
 const (
@@ -27,4 +29,49 @@ type WCAGViolation struct {
 type WCAGResult struct {
 	Violations   []WCAGViolation
 	IsAccessible bool
+}
+
+func Evaluate(features *pdfbox.PDFFeatures) WCAGResult {
+	result := WCAGResult{}
+	if features == nil {
+		result.Violations = append(result.Violations, WCAGViolation{
+			Criterion:   WCAG_1_3_1,
+			Description: "Document features are required for accessibility evaluation",
+			Element:     "document",
+		})
+		result.IsAccessible = false
+		return result
+	}
+
+	if len(features.Images) > 0 && !features.HasStructureTree {
+		result.Violations = append(result.Violations, WCAGViolation{
+			Criterion:   WCAG_1_1_1,
+			Description: "Images require tagged structure to carry accessible alternatives",
+			Element:     "image",
+		})
+	}
+	if !features.HasStructureTree {
+		result.Violations = append(result.Violations, WCAGViolation{
+			Criterion:   WCAG_1_3_1,
+			Description: "Document structure tree is required to preserve reading relationships",
+			Element:     "document",
+		})
+	}
+	if !features.HasDocumentTitle {
+		result.Violations = append(result.Violations, WCAGViolation{
+			Criterion:   WCAG_2_4_6,
+			Description: "Document title is missing",
+			Element:     "document",
+		})
+	}
+	if !features.HasLanguage {
+		result.Violations = append(result.Violations, WCAGViolation{
+			Criterion:   WCAG_3_1_1,
+			Description: "Primary document language is missing",
+			Element:     "document",
+		})
+	}
+
+	result.IsAccessible = len(result.Violations) == 0
+	return result
 }

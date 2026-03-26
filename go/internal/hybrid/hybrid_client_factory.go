@@ -19,7 +19,9 @@ func NewHybridClient(config *HybridConfig) (HybridClient, error) {
 		return nil, nil
 	case BackendDoclingFast:
 		return NewDoclingFastServerClient(config), nil
-	case BackendHancom, BackendAzure, BackendGoogle:
+	case BackendHancom:
+		return NewHancomClient(config), nil
+	case BackendAzure, BackendGoogle:
 		return nil, fmt.Errorf("unsupported hybrid backend: %s", config.Backend)
 	default:
 		return nil, fmt.Errorf("unknown hybrid backend: %s", config.Backend)

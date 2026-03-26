@@ -1,19 +1,4 @@
-"""PDF parser using opendataloader-pdf with hybrid mode (hancom backend).
-
-This module runs the local opendataloader-pdf JAR with --hybrid hancom option,
-which routes pages to the Hancom Document AI backend for processing.
-
-Requirements:
-- Hancom API access (default: https://dataloader.cloud.hancom.com/studio-lite/api)
-- Local JAR built: ./scripts/build-java.sh
-
-Usage:
-    ./scripts/bench.sh --engine opendataloader-hybrid-hancom
-
-Environment Variables:
-    HANCOM_URL: Override URL for the Hancom API backend
-    HYBRID_TIMEOUT: Request timeout in milliseconds (default: 600000)
-"""
+"""PDF parser using local opendataloader-pdf build with hancom hybrid mode."""
 
 import os
 import subprocess
@@ -24,34 +9,25 @@ from pathlib import Path
 DEFAULT_URL = "https://dataloader.cloud.hancom.com/studio-lite/api"
 
 
-def _find_local_jar() -> Path:
-    """Find the locally built JAR file."""
-    # Navigate from tests/benchmark/src to project root
+def _find_local_binary() -> Path:
+    """Find the locally built Go binary."""
     project_root = Path(__file__).parent.parent.parent.parent.resolve()
 
-    # Look for JAR in java/opendataloader-pdf-cli/target
-    cli_target = project_root / "java" / "opendataloader-pdf-cli" / "target"
+    binary = project_root / "bin" / "opendataloader-pdf"
+    if binary.exists():
+        return binary
 
-    # Find the shaded JAR (avoid *-sources.jar, *-javadoc.jar)
-    jar_pattern = "opendataloader-pdf-cli-*-shaded.jar"
-    jars = list(cli_target.glob(jar_pattern))
+    binary2 = project_root / "go" / "opendataloader-pdf"
+    if binary2.exists():
+        return binary2
 
-    if not jars:
-        # Try non-shaded JAR as fallback
-        jar_pattern = "opendataloader-pdf-cli-*.jar"
-        jars = [j for j in cli_target.glob(jar_pattern)
-                if "-sources" not in j.name and "-javadoc" not in j.name]
-
-    if not jars:
-        raise FileNotFoundError(
-            f"No JAR found in {cli_target}. Run ./scripts/build-java.sh first."
-        )
-
-    # Return the most recently modified JAR
-    return max(jars, key=lambda p: p.stat().st_mtime)
+    raise FileNotFoundError(
+        f"Go binary not found at {binary}. "
+        "Run `cd go && go build -o ../bin/opendataloader-pdf ./cmd/opendataloader-pdf/` first."
+    )
 
 
-def to_markdown(_, input_path, output_dir):
+def to_markdown(document_paths, input_path, output_dir):
     """Convert PDF to Markdown using hybrid mode with hancom backend.
 
     Args:
@@ -63,15 +39,17 @@ def to_markdown(_, input_path, output_dir):
         HANCOM_URL: Override URL for the Hancom API. Default: https://dataloader.cloud.hancom.com/studio-lite/api
         HYBRID_TIMEOUT: Request timeout in milliseconds. Default: 600000
     """
-    jar_path = _find_local_jar()
+    binary_path = _find_local_binary()
 
     backend_url = os.environ.get("HANCOM_URL", DEFAULT_URL)
     timeout_ms = os.environ.get("HYBRID_TIMEOUT", "600000")
 
     # Build command - pass input path directly (directory or file)
+    inputs = [str(path) for path in document_paths] if document_paths else [str(input_path)]
+
     command = [
-        "java", "-jar", str(jar_path),
-        str(input_path),
+        str(binary_path),
+        *inputs,
         "--output-dir", str(output_dir),
         "--format", "markdown",
         "--image-output", "off",

@@ -7,19 +7,19 @@
 
 package hybrid
 
-import "log"
+import "log/slog"
 
 func LogTriageResult(pageNum int, result *TriageResult) {
 	if result == nil {
-		log.Printf("triage page=%d result=nil", pageNum)
+		slog.Warn("triage result missing", "page", pageNum)
 		return
 	}
 
-	log.Printf(
-		"triage page=%d decision=%s confidence=%.2f signals=%+v",
-		pageNum,
-		result.Decision,
-		result.Confidence,
-		result.Signals,
+	slog.Info(
+		"triage decision",
+		"page", pageNum,
+		"decision", result.Decision,
+		"confidence", result.Confidence,
+		"signals", result.Signals,
 	)
 }

@@ -40,8 +40,7 @@ type rectPath struct {
 }
 
 func ExtractLineArts(doc *model.PDDocument, pageIdx int) ([]*ExtractedLineArt, error) {
-	page, err := doc.GetPage(pageIdx)
-	if err != nil {
+	if _, err := doc.GetPage(pageIdx); err != nil {
 		return nil, err
 	}
 
@@ -76,7 +75,7 @@ func ExtractLineArts(doc *model.PDDocument, pageIdx int) ([]*ExtractedLineArt, e
 					Height:       dy,
 					IsHorizontal: true,
 					LineWidth:    gs.lineWidth,
-					Page:         page.Number,
+					Page:         pageIdx,
 				})
 			} else if dx < 2.0 && dy > 5.0 {
 				out = append(out, &ExtractedLineArt{
@@ -86,7 +85,7 @@ func ExtractLineArts(doc *model.PDDocument, pageIdx int) ([]*ExtractedLineArt, e
 					Height:     dy,
 					IsVertical: true,
 					LineWidth:  gs.lineWidth,
-					Page:       page.Number,
+					Page:       pageIdx,
 				})
 			}
 		}
@@ -99,7 +98,7 @@ func ExtractLineArts(doc *model.PDDocument, pageIdx int) ([]*ExtractedLineArt, e
 					Height:       rect.h,
 					IsHorizontal: true,
 					LineWidth:    gs.lineWidth,
-					Page:         page.Number,
+					Page:         pageIdx,
 				})
 			} else if rect.h > rect.w && rect.h > 5.0 {
 				out = append(out, &ExtractedLineArt{
@@ -109,7 +108,7 @@ func ExtractLineArts(doc *model.PDDocument, pageIdx int) ([]*ExtractedLineArt, e
 					Height:     rect.h,
 					IsVertical: true,
 					LineWidth:  gs.lineWidth,
-					Page:       page.Number,
+					Page:       pageIdx,
 				})
 			}
 		}
