@@ -56,6 +56,8 @@ func (p *HeadingProcessor) Process(lines []*entities.TextLine, ctx *containers.P
 			Lines:      []*entities.TextLine{line},
 			FontSize:   lineFontSize(line),
 			IsBold:     lineIsBold(line),
+			IsItalic:   lineIsItalic(line),
+			FontFamily: lineFontFamily(line),
 		}
 		headings = append(headings, heading)
 		if ctx != nil {

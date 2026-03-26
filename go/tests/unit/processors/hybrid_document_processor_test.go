@@ -8,6 +8,10 @@
 package processors_test
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/api"
@@ -52,4 +56,48 @@ func TestHybridDocumentProcessorFallsBackToJavaWhenHealthCheckFails(t *testing.T
 
 	_, ok := result.Pages[0].Elements[0].(*entities.SemanticParagraph)
 	assert.True(t, ok)
+}
+
+func TestHybridDocumentProcessorWritesTriageLog(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/health":
+			w.WriteHeader(http.StatusOK)
+		case "/v1/convert/file":
+			http.Error(w, "convert failed", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	javaProcessor := processors.NewDocumentProcessor()
+	processor := processors.NewHybridDocumentProcessor(javaProcessor)
+
+	outputDir := t.TempDir()
+	pdfPath := filepath.Join(outputDir, "sample.pdf")
+	require.NoError(t, os.WriteFile(pdfPath, []byte("%PDF-1.4"), 0o644))
+
+	cfg := api.DefaultConfig()
+	cfg.Hybrid = api.HybridDoclingFast
+	cfg.HybridMode = api.HybridModeFull
+	cfg.HybridURL = server.URL
+	cfg.HybridFallback = false
+	cfg.OutputDir = outputDir
+
+	doc := &entities.Document{
+		Pages: []*entities.Page{
+			{
+				PageMetadata: entities.PageMetadata{Number: 0, Width: 595, Height: 842},
+			},
+		},
+	}
+
+	_, err := processor.Process(doc, pdfPath, cfg, containers.NewProcessorContext())
+	require.Error(t, err)
+
+	triagePath := filepath.Join(outputDir, "triage.json")
+	if _, statErr := os.Stat(triagePath); statErr != nil {
+		t.Fatalf("expected triage.json at %q: %v", triagePath, statErr)
+	}
 }

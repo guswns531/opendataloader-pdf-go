@@ -16,10 +16,12 @@ package entities
 
 type SemanticHeading struct {
 	BaseObject
-	Lines    []*TextLine
-	Level    int
-	FontSize float64
-	IsBold   bool
+	Lines      []*TextLine
+	Level      int
+	FontSize   float64
+	IsBold     bool
+	IsItalic   bool
+	FontFamily string
 }
 
 func (h *SemanticHeading) GetObjectType() ObjectType { return ObjectTypeHeading }

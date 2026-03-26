@@ -35,6 +35,10 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 	if _, err := doc.GetPage(pageIdx); err != nil {
 		return nil, err
 	}
+	fontDecoders, err := loadPageFontDecoders(doc, pageIdx)
+	if err != nil {
+		return nil, err
+	}
 
 	content, err := extractPageContentBytes(doc, pageIdx)
 	if err != nil {
@@ -178,17 +182,17 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 			}
 		case "Tj":
 			if len(operands) == 1 && (operands[0].kind == "string" || operands[0].kind == "hex") {
-				appendText(operands[0].value)
+				appendText(decodeTextToken(operands[0], fontDecoders[ts.fontName]))
 			}
 		case "TJ":
 			if len(operands) == 1 && operands[0].kind == "array" {
-				appendText(decodeTJText(operands[0]))
+				appendText(decodeTJTextWithFont(operands[0], fontDecoders[ts.fontName]))
 			}
 		case "'":
 			ts.lineMatrix = ts.lineMatrix.translate(0, -ts.leading)
 			ts.textMatrix = ts.lineMatrix
 			if len(operands) == 1 && (operands[0].kind == "string" || operands[0].kind == "hex") {
-				appendText(operands[0].value)
+				appendText(decodeTextToken(operands[0], fontDecoders[ts.fontName]))
 			}
 		case "\"":
 			ts.lineMatrix = ts.lineMatrix.translate(0, -ts.leading)
@@ -196,7 +200,7 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 			if len(operands) >= 1 {
 				last := operands[len(operands)-1]
 				if last.kind == "string" || last.kind == "hex" {
-					appendText(last.value)
+					appendText(decodeTextToken(last, fontDecoders[ts.fontName]))
 				}
 			}
 		default:

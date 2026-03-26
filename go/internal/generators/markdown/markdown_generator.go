@@ -269,8 +269,11 @@ func (g *MarkdownGenerator) writeHTMLTable(b *strings.Builder, table *entities.S
 		b.WriteString(Indent)
 		b.WriteString(HTMLTableRowTag)
 		b.WriteString(LineBreak)
-		for _, cell := range row.Cells {
+		for colIndex, cell := range row.Cells {
 			if cell == nil {
+				continue
+			}
+			if !cell.IsOrigin(rowIndex, colIndex) {
 				continue
 			}
 			tag := "td"
@@ -281,11 +284,11 @@ func (g *MarkdownGenerator) writeHTMLTable(b *strings.Builder, table *entities.S
 			b.WriteString(Indent)
 			b.WriteString("<")
 			b.WriteString(tag)
-			if cell.Colspan > 1 {
-				b.WriteString(fmt.Sprintf(" colspan=\"%d\"", cell.Colspan))
+			if cell.EffectiveColSpan() > 1 {
+				b.WriteString(fmt.Sprintf(" colspan=\"%d\"", cell.EffectiveColSpan()))
 			}
-			if cell.Rowspan > 1 {
-				b.WriteString(fmt.Sprintf(" rowspan=\"%d\"", cell.Rowspan))
+			if cell.EffectiveRowSpan() > 1 {
+				b.WriteString(fmt.Sprintf(" rowspan=\"%d\"", cell.EffectiveRowSpan()))
 			}
 			b.WriteString(">")
 			b.WriteString(g.renderTableCell(cell))
@@ -466,7 +469,7 @@ func (g *MarkdownGenerator) isInsideTable() bool {
 func (g *MarkdownGenerator) tableNeedsHTML(table *entities.SemanticTable) bool {
 	for _, row := range table.Rows {
 		for _, cell := range row.Cells {
-			if cell != nil && (cell.Colspan > 1 || cell.Rowspan > 1) {
+			if cell != nil && (cell.EffectiveColSpan() > 1 || cell.EffectiveRowSpan() > 1) {
 				return true
 			}
 		}

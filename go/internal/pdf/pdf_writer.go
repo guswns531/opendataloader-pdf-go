@@ -136,7 +136,7 @@ func (w *PDFWriter) drawTableCells(ctx *pdfcpu_model.Context, pageIdx int, table
 			continue
 		}
 		for colIdx, cell := range row.Cells {
-			if cell == nil {
+			if cell == nil || !cell.IsOrigin(rowIdx, colIdx) {
 				continue
 			}
 
@@ -150,6 +150,7 @@ func (w *PDFWriter) drawTableCells(ctx *pdfcpu_model.Context, pageIdx int, table
 				return err
 			}
 
+			originRow, originCol := cell.OriginPosition(rowIdx, colIdx)
 			if err := annotation.AddSquareAnnotation(ctx, pageIdx, &annotation.SquareAnnotation{
 				X:       cell.BBox.X,
 				Y:       cell.BBox.Y,
@@ -159,10 +160,10 @@ func (w *PDFWriter) drawTableCells(ctx *pdfcpu_model.Context, pageIdx int, table
 				Opacity: 0.4,
 				Contents: fmt.Sprintf(
 					"Table cell: row number %d, column number %d, row span %d, column span %d, text content %q",
-					rowIdx+1,
-					colIdx+1,
-					cell.Rowspan,
-					cell.Colspan,
+					originRow+1,
+					originCol+1,
+					cell.EffectiveRowSpan(),
+					cell.EffectiveColSpan(),
 					strings.TrimSpace(strings.Join(parts, " ")),
 				),
 				OCGRef: entry.Ref,

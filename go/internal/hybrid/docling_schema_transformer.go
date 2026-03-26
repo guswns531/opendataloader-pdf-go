@@ -253,9 +253,16 @@ func transformDoclingDocument(data []byte) ([]*entities.Page, error) {
 		colCount := len(table.Data.Grid[0])
 		rowHeight := tableBBox.Height / float64(rowCount)
 		colWidth := tableBBox.Width / float64(colCount)
-		cellMap := map[[2]int]doclingTableCell{}
-		for _, cell := range table.Data.TableCells {
-			cellMap[[2]int{cell.StartRow, cell.StartCol}] = cell
+		slotBox := func(row, col, rowSpan, colSpan int) entities.BoundingBox {
+			cellLeft := bboxLeft(tableBBox) + float64(col)*colWidth
+			cellTop := bboxTop(tableBBox) - float64(row)*rowHeight
+			return entities.BoundingBox{
+				X:      cellLeft,
+				Y:      cellTop - float64(rowSpan)*rowHeight,
+				Width:  float64(colSpan) * colWidth,
+				Height: float64(rowSpan) * rowHeight,
+				Page:   pageNo - 1,
+			}
 		}
 
 		rows := make([]*entities.TableRow, 0, rowCount)
@@ -263,7 +270,7 @@ func transformDoclingDocument(data []byte) ([]*entities.Page, error) {
 			rowTop := bboxTop(tableBBox) - float64(row)*rowHeight
 			rowBottom := rowTop - rowHeight
 			tableRow := &entities.TableRow{
-				Cells: make([]*entities.TableCell, 0, colCount),
+				Cells: make([]*entities.TableCell, colCount),
 				BBox: entities.BoundingBox{
 					X:      bboxLeft(tableBBox),
 					Y:      rowBottom,
@@ -272,43 +279,61 @@ func transformDoclingDocument(data []byte) ([]*entities.Page, error) {
 					Page:   pageNo - 1,
 				},
 			}
-			for col := 0; col < colCount; col++ {
-				cellInfo, ok := cellMap[[2]int{row, col}]
-				rowSpan, colSpan, text := 1, 1, ""
-				if ok {
-					if cellInfo.RowSpan > 0 {
-						rowSpan = cellInfo.RowSpan
-					}
-					if cellInfo.ColSpan > 0 {
-						colSpan = cellInfo.ColSpan
-					}
-					text = cellInfo.Text
-				}
-				cellLeft := bboxLeft(tableBBox) + float64(col)*colWidth
-				cellTop := bboxTop(tableBBox) - float64(row)*rowHeight
-				cellBox := entities.BoundingBox{
-					X:      cellLeft,
-					Y:      cellTop - float64(rowSpan)*rowHeight,
-					Width:  float64(colSpan) * colWidth,
-					Height: float64(rowSpan) * rowHeight,
-					Page:   pageNo - 1,
-				}
-				cell := &entities.TableCell{
-					Rowspan: rowSpan,
-					Colspan: colSpan,
-					BBox:    cellBox,
-				}
-				if text != "" {
-					cell.Content = []entities.IObject{
-						&entities.SemanticParagraph{
-							BaseObject: entities.BaseObject{ID: nextID("paragraph"), BBox: cellBox},
-							Lines:      []*entities.TextLine{newTextLine(nextID("line"), nextID("chunk"), cellBox, text)},
-						},
-					}
-				}
-				tableRow.Cells = append(tableRow.Cells, cell)
-			}
 			rows = append(rows, tableRow)
+		}
+
+		for _, cellInfo := range table.Data.TableCells {
+			if cellInfo.StartRow < 0 || cellInfo.StartRow >= rowCount || cellInfo.StartCol < 0 || cellInfo.StartCol >= colCount {
+				continue
+			}
+			rowSpan, colSpan := 1, 1
+			if cellInfo.RowSpan > 0 {
+				rowSpan = cellInfo.RowSpan
+			}
+			if cellInfo.ColSpan > 0 {
+				colSpan = cellInfo.ColSpan
+			}
+			if cellInfo.StartRow+rowSpan > rowCount {
+				rowSpan = rowCount - cellInfo.StartRow
+			}
+			if cellInfo.StartCol+colSpan > colCount {
+				colSpan = colCount - cellInfo.StartCol
+			}
+			cellBox := slotBox(cellInfo.StartRow, cellInfo.StartCol, rowSpan, colSpan)
+			content := []entities.IObject(nil)
+			if cellInfo.Text != "" {
+				content = []entities.IObject{
+					&entities.SemanticParagraph{
+						BaseObject: entities.BaseObject{ID: nextID("paragraph"), BBox: cellBox},
+						Lines:      []*entities.TextLine{newTextLine(nextID("line"), nextID("chunk"), cellBox, cellInfo.Text)},
+					},
+				}
+			}
+			rows[cellInfo.StartRow].Cells[cellInfo.StartCol] = entities.NewTableCell(
+				cellInfo.StartRow,
+				cellInfo.StartCol,
+				rowSpan,
+				colSpan,
+				cellBox,
+				content,
+			)
+			for r := cellInfo.StartRow; r < cellInfo.StartRow+rowSpan; r++ {
+				for c := cellInfo.StartCol; c < cellInfo.StartCol+colSpan; c++ {
+					if r == cellInfo.StartRow && c == cellInfo.StartCol {
+						continue
+					}
+					rows[r].Cells[c] = entities.NewCoveredTableCell(cellInfo.StartRow, cellInfo.StartCol, slotBox(r, c, 1, 1))
+				}
+			}
+		}
+
+		for row := 0; row < rowCount; row++ {
+			for col := 0; col < colCount; col++ {
+				if rows[row].Cells[col] != nil {
+					continue
+				}
+				rows[row].Cells[col] = entities.NewTableCell(row, col, 1, 1, slotBox(row, col, 1, 1), nil)
+			}
 		}
 		pages[pageNo-1].Elements = append(pages[pageNo-1].Elements, &entities.SemanticTable{
 			BaseObject: entities.BaseObject{ID: nextID("table"), BBox: tableBBox},

@@ -63,19 +63,13 @@ func serializeTableRowData(row *entities.TableRow, rowIndex int) map[string]inte
 
 func serializeTableCellData(cell *entities.TableCell, rowIndex, colIndex int) map[string]interface{} {
 	out := essentialInfo(&entities.BaseObject{BBox: cell.BBox}, "table cell")
-	out[jsonRowNumber] = rowIndex + 1
-	out[jsonColumnNumber] = colIndex + 1
-	out[jsonRowSpan] = defaultSpan(cell.Rowspan)
-	out[jsonColumnSpan] = defaultSpan(cell.Colspan)
+	originRow, originCol := cell.OriginPosition(rowIndex, colIndex)
+	out[jsonRowNumber] = originRow + 1
+	out[jsonColumnNumber] = originCol + 1
+	out[jsonRowSpan] = cell.EffectiveRowSpan()
+	out[jsonColumnSpan] = cell.EffectiveColSpan()
 	out[jsonKids] = serializeElements(cell.Content)
 	return out
-}
-
-func defaultSpan(span int) int {
-	if span <= 0 {
-		return 1
-	}
-	return span
 }
 
 func maxColumns(rows []*entities.TableRow) int {
@@ -89,10 +83,5 @@ func maxColumns(rows []*entities.TableRow) int {
 }
 
 func isCellOrigin(cell *entities.TableCell, rowIndex, colIndex int) bool {
-	if cell == nil {
-		return false
-	}
-	// Go tables do not track source row/column indices separately, so pointer reuse is the only
-	// available signal for merged-cell duplicates. Keep the first occurrence only.
-	return true
+	return cell != nil && cell.IsOrigin(rowIndex, colIndex)
 }

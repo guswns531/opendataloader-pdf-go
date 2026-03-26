@@ -81,21 +81,31 @@ func compactRows(rows []*entities.TableRow) []*entities.TableRow {
 			continue
 		}
 		if isEmptyRow(row) && len(compacted) > 0 {
-			last := compacted[len(compacted)-1]
-			for _, cell := range last.Cells {
-				cell.Rowspan++
+			grown := map[*entities.TableCell]struct{}{}
+			for col, cell := range row.Cells {
+				if cell == nil {
+					continue
+				}
+				origin := resolveOriginCell(compacted, len(compacted)-1, col)
+				if origin == nil {
+					continue
+				}
+				if _, ok := grown[origin]; !ok {
+					origin.Rowspan += cell.EffectiveRowSpan()
+					grown[origin] = struct{}{}
+				}
+				origin.BBox = unionBBox(origin.BBox, cell.BBox)
+				markCoveredCell(cell, origin)
 			}
-			last.BBox = unionBBox(last.BBox, row.BBox)
-			continue
 		}
+		row.BBox = unionCells(row.Cells)
 		compacted = append(compacted, row)
 	}
 	return compacted
 }
 
 func compactCells(cells []*entities.TableCell) []*entities.TableCell {
-	compacted := make([]*entities.TableCell, 0, len(cells))
-	for _, cell := range cells {
+	for col, cell := range cells {
 		if cell == nil {
 			continue
 		}
@@ -105,15 +115,19 @@ func compactCells(cells []*entities.TableCell) []*entities.TableCell {
 		if cell.Colspan <= 0 {
 			cell.Colspan = 1
 		}
-		if len(compacted) > 0 && isEmptyCell(cell) {
-			prev := compacted[len(compacted)-1]
-			prev.Colspan += cell.Colspan
-			prev.BBox = unionBBox(prev.BBox, cell.BBox)
+		if !cell.IsOriginCell {
 			continue
 		}
-		compacted = append(compacted, cell)
+		if col > 0 && isEmptyCell(cell) {
+			prev := resolveOriginCellInRow(cells, col-1)
+			if prev != nil {
+				prev.Colspan += cell.EffectiveColSpan()
+				prev.BBox = unionBBox(prev.BBox, cell.BBox)
+				markCoveredCell(cell, prev)
+			}
+		}
 	}
-	return compacted
+	return cells
 }
 
 func normalizeCellContent(contents []entities.IObject) []entities.IObject {
@@ -172,12 +186,14 @@ func buildTableFromGrid(rowBounds, colBounds []float64, cells map[[2]int][]entit
 				Height: rowBounds[row] - rowBounds[row+1],
 				Page:   page,
 			}
-			tableRow.Cells = append(tableRow.Cells, &entities.TableCell{
-				Content: normalizeCellContent(cells[[2]int{row, col}]),
-				Rowspan: 1,
-				Colspan: 1,
-				BBox:    cellBox,
-			})
+			tableRow.Cells = append(tableRow.Cells, entities.NewTableCell(
+				row,
+				col,
+				1,
+				1,
+				cellBox,
+				normalizeCellContent(cells[[2]int{row, col}]),
+			))
 		}
 		rows = append(rows, tableRow)
 	}
@@ -285,6 +301,71 @@ func isEmptyRow(row *entities.TableRow) bool {
 
 func isEmptyCell(cell *entities.TableCell) bool {
 	return cell == nil || len(normalizeCellContent(cell.Content)) == 0
+}
+
+func resolveOriginCell(rows []*entities.TableRow, row, col int) *entities.TableCell {
+	if row < 0 || row >= len(rows) || rows[row] == nil || col < 0 || col >= len(rows[row].Cells) {
+		return nil
+	}
+	cell := rows[row].Cells[col]
+	for steps := 0; cell != nil && !cell.IsOriginCell && steps < len(rows)*maxRowWidth(rows); steps++ {
+		if cell.OriginRow < 0 || cell.OriginRow >= len(rows) {
+			return nil
+		}
+		originRow := rows[cell.OriginRow]
+		if originRow == nil || cell.OriginCol < 0 || cell.OriginCol >= len(originRow.Cells) {
+			return nil
+		}
+		next := originRow.Cells[cell.OriginCol]
+		if next == cell {
+			break
+		}
+		cell = next
+	}
+	return cell
+}
+
+func resolveOriginCellInRow(cells []*entities.TableCell, col int) *entities.TableCell {
+	if col < 0 || col >= len(cells) {
+		return nil
+	}
+	cell := cells[col]
+	for steps := 0; cell != nil && !cell.IsOriginCell && steps < len(cells); steps++ {
+		if cell.OriginCol < 0 || cell.OriginCol >= len(cells) {
+			return nil
+		}
+		next := cells[cell.OriginCol]
+		if next == cell {
+			break
+		}
+		cell = next
+	}
+	return cell
+}
+
+func markCoveredCell(cell, origin *entities.TableCell) {
+	if cell == nil || origin == nil {
+		return
+	}
+	cell.IsOriginCell = false
+	cell.OriginRow = origin.OriginRow
+	cell.OriginCol = origin.OriginCol
+	cell.Rowspan = 1
+	cell.Colspan = 1
+	cell.Content = nil
+}
+
+func maxRowWidth(rows []*entities.TableRow) int {
+	maxWidth := 0
+	for _, row := range rows {
+		if row != nil && len(row.Cells) > maxWidth {
+			maxWidth = len(row.Cells)
+		}
+	}
+	if maxWidth == 0 {
+		return 1
+	}
+	return maxWidth
 }
 
 func uniqueSorted(values []float64, tolerance float64, descending bool) []float64 {

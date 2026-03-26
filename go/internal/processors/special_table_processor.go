@@ -256,19 +256,14 @@ func buildSpecialKoreanTable(lines []*entities.TextLine, ctx *containers.Process
 			BBox:  line.GetBBox(),
 		}
 		if colon < 0 {
-			cell := &entities.TableCell{
-				Content: []entities.IObject{line},
-				Rowspan: 1,
-				Colspan: 2,
-				BBox:    line.GetBBox(),
-			}
+			cell := entities.NewTableCell(rowIdx, 0, 1, 2, line.GetBBox(), []entities.IObject{line})
 			row.Cells = append(row.Cells, cell)
 		} else {
 			left := textChunkSliceFromLine(line, 0, colon)
 			right := textChunkSliceFromLine(line, colon+1, len(text))
 			row.Cells = append(row.Cells,
-				&entities.TableCell{Content: objectsForTextChunk(left), Rowspan: 1, Colspan: 1, BBox: textBBoxOrLine(left, line.GetBBox())},
-				&entities.TableCell{Content: objectsForTextChunk(right), Rowspan: 1, Colspan: 1, BBox: textBBoxOrLine(right, line.GetBBox())},
+				entities.NewTableCell(rowIdx, 0, 1, 1, textBBoxOrLine(left, line.GetBBox()), objectsForTextChunk(left)),
+				entities.NewTableCell(rowIdx, 1, 1, 1, textBBoxOrLine(right, line.GetBBox()), objectsForTextChunk(right)),
 			)
 		}
 		rows = append(rows, row)

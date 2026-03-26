@@ -11,59 +11,76 @@ import (
 	"sort"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
-	"github.com/opendataloader-project/opendataloader-pdf-go/internal/utils/levels"
 )
 
 type HeadingLevelProcessor struct{}
 type LevelProcessor struct{}
+
+type headingStyleKey struct {
+	FontSize   float64
+	IsBold     bool
+	IsItalic   bool
+	FontFamily string
+}
 
 func (p *LevelProcessor) Process(headings []*entities.SemanticHeading) []*entities.SemanticHeading {
 	if len(headings) == 0 {
 		return headings
 	}
 
-	infoBySize := map[float64]*levels.LevelInfo{}
+	styleGroups := map[headingStyleKey][]*entities.SemanticHeading{}
 	for _, heading := range headings {
 		if heading == nil {
 			continue
 		}
-		info := infoBySize[heading.FontSize]
-		if info == nil {
-			info = &levels.LevelInfo{FontSize: heading.FontSize, IsBold: heading.IsBold}
-			infoBySize[heading.FontSize] = info
+		key := headingStyleKey{
+			FontSize:   heading.FontSize,
+			IsBold:     heading.IsBold,
+			IsItalic:   heading.IsItalic,
+			FontFamily: heading.FontFamily,
 		}
-		info.Count++
-		info.IsBold = info.IsBold || heading.IsBold
+		styleGroups[key] = append(styleGroups[key], heading)
 	}
 
-	var ordered []*levels.LevelInfo
-	for _, info := range infoBySize {
-		ordered = append(ordered, info)
+	ordered := make([]headingStyleKey, 0, len(styleGroups))
+	for key := range styleGroups {
+		ordered = append(ordered, key)
 	}
 	sort.Slice(ordered, func(i, j int) bool {
-		if ordered[i].FontSize == ordered[j].FontSize {
-			if ordered[i].IsBold == ordered[j].IsBold {
-				return ordered[i].Count > ordered[j].Count
-			}
-			return ordered[i].IsBold && !ordered[j].IsBold
-		}
-		return ordered[i].FontSize > ordered[j].FontSize
+		return compareHeadingStyle(ordered[i], ordered[j]) < 0
 	})
 
-	levelBySize := map[float64]int{}
-	for i, info := range ordered {
+	for i, key := range ordered {
 		level := i + 1
 		if level > 6 {
 			level = 6
 		}
-		info.Level = level
-		levelBySize[info.FontSize] = level
-	}
-
-	for _, heading := range headings {
-		if heading != nil {
-			heading.Level = levelBySize[heading.FontSize]
+		for _, heading := range styleGroups[key] {
+			heading.Level = level
 		}
 	}
 	return headings
+}
+
+func compareHeadingStyle(left, right headingStyleKey) int {
+	switch {
+	case left.FontSize > right.FontSize:
+		return -1
+	case left.FontSize < right.FontSize:
+		return 1
+	case left.IsBold && !right.IsBold:
+		return -1
+	case !left.IsBold && right.IsBold:
+		return 1
+	case left.IsItalic && !right.IsItalic:
+		return -1
+	case !left.IsItalic && right.IsItalic:
+		return 1
+	case left.FontFamily < right.FontFamily:
+		return -1
+	case left.FontFamily > right.FontFamily:
+		return 1
+	default:
+		return 0
+	}
 }

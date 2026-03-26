@@ -117,8 +117,11 @@ func (g *HtmlGenerator) writeTable(b *strings.Builder, table *entities.SemanticT
 	for rowIndex, row := range table.Rows {
 		b.WriteString(HTMLTableRowTag)
 		b.WriteString(HTMLLineBreak)
-		for _, cell := range row.Cells {
+		for colIndex, cell := range row.Cells {
 			if cell == nil {
+				continue
+			}
+			if !cell.IsOrigin(rowIndex, colIndex) {
 				continue
 			}
 			openTag := HTMLTableCellTag
@@ -127,7 +130,7 @@ func (g *HtmlGenerator) writeTable(b *strings.Builder, table *entities.SemanticT
 				openTag = HTMLTableHeaderTag
 				closeTag = HTMLTableHeaderCloseTag
 			}
-			if cell.Colspan > 1 || cell.Rowspan > 1 {
+			if cell.EffectiveColSpan() > 1 || cell.EffectiveRowSpan() > 1 {
 				tagName := "td"
 				if rowIndex == 0 {
 					tagName = "th"
@@ -135,14 +138,14 @@ func (g *HtmlGenerator) writeTable(b *strings.Builder, table *entities.SemanticT
 				var attrs strings.Builder
 				attrs.WriteString("<")
 				attrs.WriteString(tagName)
-				if cell.Colspan > 1 {
+				if cell.EffectiveColSpan() > 1 {
 					attrs.WriteString(" colspan=\"")
-					attrs.WriteString(strconv.Itoa(cell.Colspan))
+					attrs.WriteString(strconv.Itoa(cell.EffectiveColSpan()))
 					attrs.WriteString("\"")
 				}
-				if cell.Rowspan > 1 {
+				if cell.EffectiveRowSpan() > 1 {
 					attrs.WriteString(" rowspan=\"")
-					attrs.WriteString(strconv.Itoa(cell.Rowspan))
+					attrs.WriteString(strconv.Itoa(cell.EffectiveRowSpan()))
 					attrs.WriteString("\"")
 				}
 				attrs.WriteString(">")

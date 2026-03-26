@@ -83,6 +83,7 @@ type textState struct {
 type streamToken struct {
 	kind  string
 	value string
+	raw   []byte
 	items []streamToken
 }
 
@@ -134,15 +135,15 @@ func (s *streamScanner) nextToken() (streamToken, bool, error) {
 
 	switch ch := s.data[s.pos]; ch {
 	case '(':
-		v, err := s.readLiteralString()
-		return streamToken{kind: "string", value: v}, true, err
+		b, err := s.readLiteralString()
+		return streamToken{kind: "string", value: normalizePDFString(b), raw: b}, true, err
 	case '<':
 		if s.peekString("<<") {
 			s.pos += 2
 			return streamToken{kind: "word", value: "<<"}, true, nil
 		}
-		v, err := s.readHexString()
-		return streamToken{kind: "hex", value: v}, true, err
+		b, err := s.readHexString()
+		return streamToken{kind: "hex", value: normalizePDFString(b), raw: b}, true, err
 	case '>':
 		if s.peekString(">>") {
 			s.pos += 2
@@ -185,7 +186,7 @@ func (s *streamScanner) readArray() ([]streamToken, error) {
 	}
 }
 
-func (s *streamScanner) readLiteralString() (string, error) {
+func (s *streamScanner) readLiteralString() ([]byte, error) {
 	s.pos++
 	var buf bytes.Buffer
 	depth := 1
@@ -229,7 +230,7 @@ func (s *streamScanner) readLiteralString() (string, error) {
 					}
 					v, err := strconv.ParseInt(string(oct), 8, 32)
 					if err != nil {
-						return "", err
+						return nil, err
 					}
 					buf.WriteByte(byte(v))
 				} else {
@@ -243,15 +244,15 @@ func (s *streamScanner) readLiteralString() (string, error) {
 		} else if ch == ')' {
 			depth--
 			if depth == 0 {
-				return normalizePDFString(buf.Bytes()), nil
+				return buf.Bytes(), nil
 			}
 		}
 		buf.WriteByte(ch)
 	}
-	return normalizePDFString(buf.Bytes()), nil
+	return buf.Bytes(), nil
 }
 
-func (s *streamScanner) readHexString() (string, error) {
+func (s *streamScanner) readHexString() ([]byte, error) {
 	s.pos++
 	start := s.pos
 	for s.pos < len(s.data) && s.data[s.pos] != '>' {
@@ -272,13 +273,13 @@ func (s *streamScanner) readHexString() (string, error) {
 		s.pos++
 	}
 	if raw == "" {
-		return "", nil
+		return nil, nil
 	}
 	b, err := hex.DecodeString(raw)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return normalizePDFString(b), nil
+	return b, nil
 }
 
 func (s *streamScanner) readName() string {

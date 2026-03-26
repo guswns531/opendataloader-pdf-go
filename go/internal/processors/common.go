@@ -9,6 +9,7 @@ package processors
 
 import (
 	"strings"
+	"unicode"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
 )
@@ -45,6 +46,75 @@ func lineIsBold(line *entities.TextLine) bool {
 		}
 	}
 	return false
+}
+
+func lineIsItalic(line *entities.TextLine) bool {
+	for _, chunk := range line.Chunks {
+		if chunk != nil && chunk.FontStyle.Italic {
+			return true
+		}
+	}
+	return false
+}
+
+func lineFontFamily(line *entities.TextLine) string {
+	if line == nil || len(line.Chunks) == 0 {
+		return ""
+	}
+	bestSize := 0.0
+	bestFamily := ""
+	bestTextLen := -1
+	for _, chunk := range line.Chunks {
+		if chunk == nil {
+			continue
+		}
+		family := normalizeFontFamily(chunk.FontStyle.FontName)
+		textLen := len(strings.TrimSpace(chunk.Text))
+		size := chunk.FontStyle.FontSize
+		if size > bestSize || (size == bestSize && textLen > bestTextLen) {
+			bestSize = size
+			bestFamily = family
+			bestTextLen = textLen
+		}
+		if bestFamily == "" && family != "" {
+			bestFamily = family
+		}
+	}
+	return bestFamily
+}
+
+func normalizeFontFamily(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	if plus := strings.IndexRune(name, '+'); plus >= 0 && plus <= 6 {
+		name = name[plus+1:]
+	}
+	name = strings.ReplaceAll(name, ",", "-")
+	name = strings.ReplaceAll(name, "_", "-")
+
+	parts := strings.FieldsFunc(name, func(r rune) bool {
+		return r == '-' || unicode.IsSpace(r)
+	})
+	if len(parts) == 0 {
+		return name
+	}
+
+	end := len(parts)
+	for end > 1 && isFontStyleToken(parts[end-1]) {
+		end--
+	}
+	return strings.Join(parts[:end], " ")
+}
+
+func isFontStyleToken(token string) bool {
+	switch strings.ToLower(token) {
+	case "bold", "italic", "oblique", "regular", "roman", "medium", "semibold", "demibold", "light", "book", "black", "heavy":
+		return true
+	default:
+		return false
+	}
 }
 
 func mergeBoxes(boxes ...entities.BoundingBox) entities.BoundingBox {

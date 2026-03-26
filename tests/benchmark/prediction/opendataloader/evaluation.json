@@ -4,8 +4,8 @@
     "engine_version": "local",
     "processor": "Apple M5",
     "document_count": 200,
-    "total_elapsed": 1.2060511112213135,
-    "elapsed_per_doc": 0.006030255556106567,
+    "total_elapsed": 0.9080440998077393,
+    "elapsed_per_doc": 0.004540220499038696,
     "date": "2026-03-26"
   },
   "metrics": {
@@ -2636,8 +2636,8 @@
     "tn": 155
   },
   "speed": {
-    "total_elapsed": 1.2060511112213135,
-    "elapsed_per_doc": 0.006030255556106567,
+    "total_elapsed": 0.9080440998077393,
+    "elapsed_per_doc": 0.004540220499038696,
     "document_count": 200,
     "processor": "Apple M5"
   }

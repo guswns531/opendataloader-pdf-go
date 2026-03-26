@@ -18,6 +18,8 @@ package processors
 
 import (
 	"fmt"
+	"log/slog"
+	"path/filepath"
 	"sort"
 	"sync"
 
@@ -75,16 +77,23 @@ func (p *HybridDocumentProcessor) Process(doc *entities.Document, pdfPath string
 
 	javaPageMap := map[int]*entities.Page{}
 	backendPageNums := make([]int, 0)
+	triageResults := make(map[int]*hybrid.TriageResult, len(doc.Pages))
 	for _, page := range doc.Pages {
 		if page == nil {
 			continue
 		}
-		decision := hybrid.TriageDecisionJava
+		var result *hybrid.TriageResult
 		if config.HybridMode == api.HybridModeFull {
-			decision = hybrid.TriageDecisionBackend
+			result = &hybrid.TriageResult{
+				Decision:   hybrid.TriageDecisionBackend,
+				Confidence: 1.0,
+			}
 		} else {
-			result := (&hybrid.TriageProcessor{}).Triage(page)
-			hybrid.LogTriageResult(page.Number+1, result)
+			result = (&hybrid.TriageProcessor{}).Triage(page)
+		}
+		triageResults[page.Number] = result
+		decision := hybrid.TriageDecisionJava
+		if result != nil {
 			decision = result.Decision
 		}
 		if decision == hybrid.TriageDecisionBackend {
@@ -93,6 +102,9 @@ func (p *HybridDocumentProcessor) Process(doc *entities.Document, pdfPath string
 			javaPageMap[page.Number] = page
 		}
 	}
+
+	logTriageSummary(triageResults)
+	logTriageToFile(pdfPath, config, triageResults)
 
 	if len(backendPageNums) == 0 {
 		return p.javaProcessor.processJavaDocument(doc, config, ctx)
@@ -215,6 +227,35 @@ func (p *HybridDocumentProcessor) Process(doc *entities.Document, pdfPath string
 	}
 	MergeListsAcrossPages(merged.Pages)
 	return merged, nil
+}
+
+func logTriageSummary(triageResults map[int]*hybrid.TriageResult) {
+	javaCount := 0
+	backendCount := 0
+	for _, result := range triageResults {
+		if result == nil {
+			continue
+		}
+		if result.Decision == hybrid.TriageDecisionBackend {
+			backendCount++
+			continue
+		}
+		javaCount++
+	}
+
+	slog.Info("triage summary", "java_pages", javaCount, "backend_pages", backendCount)
+}
+
+func logTriageToFile(pdfPath string, config *api.Config, triageResults map[int]*hybrid.TriageResult) {
+	if config == nil || config.Hybrid == "" || config.Hybrid == api.HybridOff {
+		return
+	}
+
+	documentName := filepath.Base(pdfPath)
+	outputDir := outputDirForConfig(pdfPath, config)
+	if err := (&hybrid.TriageLogger{}).LogToFile(outputDir, documentName, config.Hybrid, triageResults); err != nil {
+		slog.Warn("failed to write triage log", "path", outputDir, "error", err)
+	}
 }
 
 func applyHybridContentFilter(doc *entities.Document, config *api.Config) {

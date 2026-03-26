@@ -31,6 +31,26 @@ func TestNormalizePDFStringDecodesWinAnsiAndLigature(t *testing.T) {
 	assert.Equal(t, "Rectified", normalizePDFString([]byte("Recti\x02ed")))
 }
 
+func TestParseCMapContentDecodesBFCharAndBFRange(t *testing.T) {
+	cmap := `
+2 beginbfchar
+<01> <0041>
+<02> <0042>
+endbfchar
+1 beginbfrange
+<10> <12> <0061>
+endbfrange
+`
+	mapping, codeLens, err := parseCMapContent(cmap)
+	require.NoError(t, err)
+	assert.Equal(t, []int{1}, codeLens)
+	assert.Equal(t, "A", mapping[0x01])
+	assert.Equal(t, "B", mapping[0x02])
+	assert.Equal(t, "a", mapping[0x10])
+	assert.Equal(t, "b", mapping[0x11])
+	assert.Equal(t, "c", mapping[0x12])
+}
+
 func TestExtractTextChunksPreservesTrailingSpace(t *testing.T) {
 	pdf := writeTextPDF(t, "BT /F1 12 Tf 72 400 Td (Hello ) Tj (World) Tj ET\n")
 	doc, err := model.Open(pdf, "")
