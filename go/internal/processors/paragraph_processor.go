@@ -6,6 +6,7 @@ package processors
 import (
 	"math"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/containers"
@@ -28,6 +29,15 @@ func (p *ParagraphProcessor) Process(lines []*entities.TextLine, ctx *containers
 	if len(filtered) == 0 {
 		return nil
 	}
+	sort.Slice(filtered, func(i, j int) bool {
+		if filtered[i].BBox.Page != filtered[j].BBox.Page {
+			return filtered[i].BBox.Page < filtered[j].BBox.Page
+		}
+		if !closeEnough(filtered[i].Baseline, filtered[j].Baseline, textLineBaselineTolerance) {
+			return filtered[i].Baseline > filtered[j].Baseline
+		}
+		return filtered[i].BBox.X < filtered[j].BBox.X
+	})
 
 	paragraphs := make([]*entities.SemanticParagraph, 0)
 	current := newParagraph(filtered[0], ctx)
@@ -89,39 +99,27 @@ func canMerge(line1, line2 *entities.TextLine) bool {
 }
 
 func mergeProbability(line1, line2 *entities.TextLine) float64 {
+	alignment := detectPairAlignment(line1, line2)
+	overlapRatio := horizontalOverlapRatio(line1.BBox, line2.BBox)
 	font1 := averageFontSize(line1.Chunks)
 	font2 := averageFontSize(line2.Chunks)
-	if font1 <= 0 {
-		font1 = line1.BBox.Height
-	}
-	if font2 <= 0 {
-		font2 = line2.BBox.Height
-	}
-	lineHeight := math.Max(line1.BBox.Height, line2.BBox.Height)
-	if lineHeight <= 0 {
-		lineHeight = math.Max(font1, font2)
-	}
+	lineHeight := math.Max(math.Max(line1.BBox.Height, line2.BBox.Height), math.Max(font1, font2))
 	if lineHeight <= 0 {
 		lineHeight = 1
 	}
-
-	alignment := detectPairAlignment(line1, line2)
-	fontSimilar := similarFontSize(font1, font2)
-	overlapRatio := horizontalOverlapRatio(line1.BBox, line2.BBox)
 	verticalGap := lineVerticalGap(line1.BBox, line2.BBox)
-
 	score := 0.0
+	if line1.BBox.Page == line2.BBox.Page {
+		score += 0.20
+	}
 	if alignment != "" {
-		score += 0.30
+		score += 0.20
 	}
-	if fontSimilar {
-		score += 0.25
-	}
-	if shareComparableWeight(line1, line2) {
-		score += 0.10
+	if similarFontSize(font1, font2) {
+		score += 0.20
 	}
 	if overlapRatio > 0.50 {
-		score += 0.15
+		score += 0.20
 	}
 	if verticalGap < lineHeight*1.5 {
 		score += 0.20
@@ -136,7 +134,14 @@ func detectPairAlignment(line1, line2 *entities.TextLine) string {
 	center1 := line1.BBox.X + line1.BBox.Width/2
 	center2 := line2.BBox.X + line2.BBox.Width/2
 	centerAligned := closeEnough(center1, center2, tolerance)
-	justifyAligned := line1.BBox.Width >= line2.BBox.Width*0.9 && line2.BBox.Width >= line1.BBox.Width*0.9 && leftAligned && rightAligned
+	maxWidth := math.Max(line1.BBox.Width, line2.BBox.Width)
+	justifyAligned := maxWidth > 0 &&
+		len(line1.Chunks) > 0 &&
+		len(line2.Chunks) > 0 &&
+		line1.BBox.Width >= maxWidth*0.9 &&
+		line2.BBox.Width >= maxWidth*0.9 &&
+		leftAligned &&
+		rightAligned
 
 	switch {
 	case justifyAligned:
@@ -163,12 +168,17 @@ func detectParagraphAlignment(lines []*entities.TextLine) string {
 	leftAligned := true
 	rightAligned := true
 	centerAligned := true
+	justifyAligned := len(lines) >= 2
 	base := lines[0]
 	tolerance := math.Max(1.5, base.BBox.Height*0.5)
 	baseCenter := base.BBox.X + base.BBox.Width/2
 	baseRight := base.BBox.X + base.BBox.Width
+	maxWidth := base.BBox.Width
 
 	for _, line := range lines[1:] {
+		if line.BBox.Width > maxWidth {
+			maxWidth = line.BBox.Width
+		}
 		if !closeEnough(base.BBox.X, line.BBox.X, tolerance) {
 			leftAligned = false
 		}
@@ -179,9 +189,15 @@ func detectParagraphAlignment(lines []*entities.TextLine) string {
 			centerAligned = false
 		}
 	}
+	for _, line := range lines {
+		if maxWidth <= 0 || line.BBox.Width < maxWidth*0.9 {
+			justifyAligned = false
+			break
+		}
+	}
 
 	switch {
-	case leftAligned && rightAligned:
+	case justifyAligned && leftAligned && rightAligned:
 		return entities.AlignJustify
 	case leftAligned:
 		return entities.AlignLeft
@@ -221,21 +237,6 @@ func isLabeledLine(line *entities.TextLine) bool {
 		return true
 	}
 	return paragraphLabelPattern.MatchString(strings.TrimSpace(line.GetText()))
-}
-
-func shareComparableWeight(line1, line2 *entities.TextLine) bool {
-	chunk1 := firstVisibleChunk(line1)
-	chunk2 := firstVisibleChunk(line2)
-	if chunk1 == nil || chunk2 == nil {
-		return false
-	}
-
-	weight1 := chunk1.FontStyle.FontWeight
-	weight2 := chunk2.FontStyle.FontWeight
-	if weight1 == 0 && weight2 == 0 {
-		return chunk1.FontStyle.Bold == chunk2.FontStyle.Bold
-	}
-	return closeEnough(weight1, weight2, 0.1)
 }
 
 func firstVisibleChunk(line *entities.TextLine) *entities.TextChunk {

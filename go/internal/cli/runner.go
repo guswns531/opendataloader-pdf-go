@@ -28,12 +28,28 @@ import (
 	_ "github.com/opendataloader-project/opendataloader-pdf-go/internal/processors"
 )
 
+type UsageError struct {
+	err error
+}
+
+func (e *UsageError) Error() string {
+	return e.err.Error()
+}
+
+func (e *UsageError) Unwrap() error {
+	return e.err
+}
+
 func Run(opts *CLIOptions, args []string) error {
 	if opts == nil {
 		opts = &CLIOptions{}
 	}
 
-	config := opts.ToConfig()
+	config, err := opts.BuildConfig(args)
+	if err != nil {
+		return &UsageError{err: err}
+	}
+
 	var errs []error
 	for _, path := range args {
 		if err := processPath(path, config); err != nil {
@@ -45,7 +61,7 @@ func Run(opts *CLIOptions, args []string) error {
 	if len(errs) == 0 {
 		return nil
 	}
-	return fmt.Errorf("processing failed: %w", errors.Join(errs...))
+	return fmt.Errorf("one or more files failed: %w", errors.Join(errs...))
 }
 
 func processPath(path string, config *api.Config) error {

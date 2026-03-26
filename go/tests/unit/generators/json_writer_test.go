@@ -15,6 +15,7 @@
 package generators_test
 
 import (
+	"math"
 	"os"
 	"testing"
 
@@ -191,6 +192,20 @@ func TestJsonWriterOutputMatchesSchema(t *testing.T) {
 	assert.Truef(t, result.Valid(), "schema errors: %v", result.Errors())
 }
 
+func TestSerializeBBoxArrayPrecisionAndInvalidValues(t *testing.T) {
+	bbox := entities.BoundingBox{
+		X: 1.1234567, Y: 2.7654321, Width: math.Inf(1), Height: math.NaN(), Page: 0,
+	}
+
+	got := json_gen.SerializeBBoxArray(bbox)
+
+	require.Len(t, got, 4)
+	assert.Equal(t, 1.123457, got[0])
+	assert.Equal(t, 2.765432, got[1])
+	assert.Nil(t, got[2])
+	assert.Nil(t, got[3])
+}
+
 func TestTextSerializersMatchJavaTypeNames(t *testing.T) {
 	chunk := &entities.TextChunk{
 		BaseObject: entities.BaseObject{
@@ -267,6 +282,6 @@ func TestJsonWriterSerializesTopLevelTextLine(t *testing.T) {
 
 	kids := decoded["kids"].([]interface{})
 	require.Len(t, kids, 1)
-	assert.Equal(t, "paragraph", kids[0].(map[string]interface{})["type"])
+	assert.Equal(t, "text chunk", kids[0].(map[string]interface{})["type"])
 	assert.Equal(t, "Standalone line", kids[0].(map[string]interface{})["content"])
 }

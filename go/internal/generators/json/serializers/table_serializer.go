@@ -24,10 +24,10 @@ func SerializeTable(t *entities.SemanticTable) map[string]interface{} {
 	out := essentialInfo(t, "table")
 	out[jsonNumberOfRows] = len(t.Rows)
 	out[jsonNumberOfColumns] = maxColumns(t.Rows)
-	if prevID, ok := numericID(t.PrevTableID); ok {
+	if prevID, ok := parseNumericID(t.PrevTableID); ok {
 		out[jsonPreviousTableID] = prevID
 	}
-	if nextID, ok := numericID(t.NextTableID); ok {
+	if nextID, ok := parseNumericID(t.NextTableID); ok {
 		out[jsonNextTableID] = nextID
 	}
 
@@ -50,6 +50,9 @@ func serializeTableRowData(row *entities.TableRow, rowIndex int) map[string]inte
 	cells := make([]interface{}, 0, len(row.Cells))
 	for colIndex, cell := range row.Cells {
 		if cell == nil {
+			continue
+		}
+		if !isCellOrigin(cell, rowIndex, colIndex) {
 			continue
 		}
 		cells = append(cells, serializeTableCellData(cell, rowIndex, colIndex))
@@ -83,4 +86,13 @@ func maxColumns(rows []*entities.TableRow) int {
 		}
 	}
 	return maxCols
+}
+
+func isCellOrigin(cell *entities.TableCell, rowIndex, colIndex int) bool {
+	if cell == nil {
+		return false
+	}
+	// Go tables do not track source row/column indices separately, so pointer reuse is the only
+	// available signal for merged-cell duplicates. Keep the first occurrence only.
+	return true
 }

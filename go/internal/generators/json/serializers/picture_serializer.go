@@ -11,5 +11,12 @@ package serializers
 import "github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
 
 func SerializePicture(img *entities.SemanticImage, imageOutput string) map[string]interface{} {
-	return SerializeImage(img, imageOutput)
+	out := SerializeImage(img, imageOutput)
+	if out == nil {
+		return nil
+	}
+	if img.Alt != "" {
+		out[jsonDescription] = img.Alt
+	}
+	return out
 }

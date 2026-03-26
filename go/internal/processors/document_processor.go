@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/api"
@@ -54,7 +53,7 @@ func (p *DocumentProcessor) Process(pdfPath string, config *api.Config) (*entiti
 
 	ctx := containers.NewProcessorContext()
 	ctx.UseStructTree = config.UseStructTree
-	ctx.ImageDir = config.ImageDir
+	ctx.ImageDir = resolveImageDir(pdfPath, config)
 	ctx.EmbedImages = config.ImageOutput == api.ImageOutputEmbedded
 	ctx.ImageFormat = config.ImageFormat
 
@@ -123,16 +122,12 @@ func (p *DocumentProcessor) processJavaDocument(doc *entities.Document, config *
 		pageElements, pageHeadings = transformTextRuns(pageElements, ctx)
 		headings = append(headings, pageHeadings...)
 		pageElements = (&CaptionProcessor{}).Process(pageElements, ctx)
-
-		if config.ReadingOrder == api.ReadingOrderXYCut {
-			pageElements = readingorder.XYCutPlusPlusSorter{}.Sort(pageElements, page.Width, page.Height)
-		}
-
 		page.Elements = sortObjects(pageElements)
 	}
 
 	MergeListsAcrossPages(doc.Pages)
 	(&LevelProcessor{}).Process(headings)
+	sortDocumentContents(doc, config)
 
 	if config.Sanitize {
 		utils.Sanitize(doc, utils.DefaultRules)
@@ -148,11 +143,11 @@ func (p *DocumentProcessor) loadDocument(pdfPath string, config *api.Config, ctx
 	defer doc.Close()
 
 	pageCount := doc.PageCount()
-	selectedPages, err := parsePageRange(config.Pages, pageCount)
+	selectedPages, explicitSelection, err := parsePageRange(config.Pages, pageCount)
 	if err != nil {
 		return nil, err
 	}
-	if len(selectedPages) == 0 {
+	if !explicitSelection {
 		selectedPages = make([]int, 0, pageCount)
 		for pageNum := 1; pageNum <= pageCount; pageNum++ {
 			selectedPages = append(selectedPages, pageNum)
@@ -181,7 +176,7 @@ func (p *DocumentProcessor) loadDocument(pdfPath string, config *api.Config, ctx
 		}
 		var images []*extractor.ExtractedImage
 		if config.ImageOutput != api.ImageOutputOff {
-			images, err = extractor.ExtractImages(doc, pageIdx, config.ImageDir)
+			images, err = extractor.ExtractImages(doc, pageIdx, ctx.ImageDir)
 			if err != nil {
 				return nil, err
 			}
@@ -198,7 +193,7 @@ func (p *DocumentProcessor) loadDocument(pdfPath string, config *api.Config, ctx
 
 		out.Pages = append(out.Pages, &entities.Page{
 			PageMetadata: entities.PageMetadata{
-				Number: pageIdx,
+				Number: page.Number,
 				Width:  page.Width,
 				Height: page.Height,
 			},
@@ -297,63 +292,21 @@ func fontWeight(bold bool) float64 {
 	return 400
 }
 
-func parsePageRange(spec string, totalPages int) ([]int, error) {
-	if strings.TrimSpace(spec) == "" {
-		return nil, nil
+func parsePageRange(spec string, totalPages int) ([]int, bool, error) {
+	pages, err := api.ParsePageRanges(spec)
+	if err != nil {
+		return nil, false, err
 	}
-
-	seen := map[int]struct{}{}
-	var pages []int
-	for _, part := range strings.Split(spec, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		if strings.Contains(part, "-") {
-			bounds := strings.SplitN(part, "-", 2)
-			if len(bounds) != 2 {
-				return nil, fmt.Errorf("invalid page range %q", part)
-			}
-			start, err := strconv.Atoi(strings.TrimSpace(bounds[0]))
-			if err != nil {
-				return nil, fmt.Errorf("invalid page %q", part)
-			}
-			end, err := strconv.Atoi(strings.TrimSpace(bounds[1]))
-			if err != nil {
-				return nil, fmt.Errorf("invalid page %q", part)
-			}
-			if start > end {
-				start, end = end, start
-			}
-			if start < 1 || end > totalPages {
-				return nil, fmt.Errorf("page range %q out of bounds (1-%d)", part, totalPages)
-			}
-			for page := start; page <= end; page++ {
-				if _, ok := seen[page]; ok {
-					continue
-				}
-				seen[page] = struct{}{}
-				pages = append(pages, page)
-			}
-			continue
-		}
-
-		page, err := strconv.Atoi(part)
-		if err != nil {
-			return nil, fmt.Errorf("invalid page %q", part)
-		}
-		if page < 1 || page > totalPages {
-			return nil, fmt.Errorf("page %d out of bounds (1-%d)", page, totalPages)
-		}
-		if _, ok := seen[page]; ok {
-			continue
-		}
-		seen[page] = struct{}{}
-		pages = append(pages, page)
+	if len(pages) == 0 {
+		return nil, false, nil
 	}
-
-	sort.Ints(pages)
-	return pages, nil
+	validPages := make([]int, 0, len(pages))
+	for _, page := range pages {
+		if page >= 1 && page <= totalPages {
+			validPages = append(validPages, page)
+		}
+	}
+	return validPages, true, nil
 }
 
 func splitTextChunks(elements []entities.IObject) ([]entities.IObject, []*entities.TextChunk) {
@@ -466,11 +419,41 @@ func sortObjects(elements []entities.IObject) []entities.IObject {
 	return out
 }
 
-func (p *DocumentProcessor) writeOutputs(pdfPath string, doc *entities.Document, config *api.Config) error {
-	outputDir := config.OutputDir
-	if outputDir == "" {
-		outputDir = filepath.Dir(pdfPath)
+func sortDocumentContents(doc *entities.Document, config *api.Config) {
+	if doc == nil || config == nil || config.ReadingOrder != api.ReadingOrderXYCut {
+		return
 	}
+	sorter := readingorder.XYCutPlusPlusSorter{}
+	for _, page := range doc.Pages {
+		if page == nil {
+			continue
+		}
+		page.Elements = sorter.Sort(page.Elements, page.Width, page.Height)
+	}
+}
+
+func resolveImageDir(pdfPath string, config *api.Config) string {
+	if config == nil || config.ImageOutput == api.ImageOutputOff {
+		return ""
+	}
+	if trimmed := strings.TrimSpace(config.ImageDir); trimmed != "" {
+		return trimmed
+	}
+	baseName := strings.TrimSuffix(filepath.Base(pdfPath), filepath.Ext(pdfPath))
+	return filepath.Join(outputDirForConfig(pdfPath, config), baseName+"_images")
+}
+
+func outputDirForConfig(pdfPath string, config *api.Config) string {
+	if config != nil {
+		if trimmed := strings.TrimSpace(config.OutputDir); trimmed != "" {
+			return trimmed
+		}
+	}
+	return filepath.Dir(pdfPath)
+}
+
+func (p *DocumentProcessor) writeOutputs(pdfPath string, doc *entities.Document, config *api.Config) error {
+	outputDir := outputDirForConfig(pdfPath, config)
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return err
 	}

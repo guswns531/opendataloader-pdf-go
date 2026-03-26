@@ -19,6 +19,11 @@ func (c *PDFAChecker) Check(features *PDFFeatures) *model.ValidationResult {
 		Flavour: c.Flavour,
 	}
 
+	if c.Flavour == model.PDFAFlavourNone {
+		result.IsCompliant = true
+		return result
+	}
+
 	if features == nil {
 		addRuleResult(result, "GENERAL_FEATURES_PRESENT", false,
 			"PDF features are required for validation", "input", "document")

@@ -21,6 +21,8 @@ type ModeWeightStatistics struct {
 	modeMax  float64
 	countMap map[float64]float64
 	sorted   []scoreWeightEntry
+	higher   []float64
+	ready    bool
 }
 
 func NewModeWeightStatistics(scoreMin, scoreMax, modeMin, modeMax float64) *ModeWeightStatistics {
@@ -43,6 +45,8 @@ func (s *ModeWeightStatistics) Add(value, weight float64) {
 	}
 	s.countMap[value] += weight
 	s.sorted = nil
+	s.higher = nil
+	s.ready = false
 }
 
 func (s *ModeWeightStatistics) SortByFrequency() {
@@ -84,25 +88,32 @@ func (s *ModeWeightStatistics) GetBoost(score float64) float64 {
 	if s == nil {
 		return 0
 	}
-	if len(s.sorted) == 0 {
-		s.SortByFrequency()
-	}
-
-	mode := s.GetMode()
-	var higherScores []float64
-	for _, entry := range s.sorted {
-		if entry.Score > mode && entry.Score >= s.scoreMin && entry.Score <= s.scoreMax {
-			higherScores = append(higherScores, entry.Score)
-		}
-	}
-	sort.Float64s(higherScores)
-	if len(higherScores) == 0 {
+	s.initHigherScores()
+	if len(s.higher) == 0 {
 		return 0
 	}
-	for idx, candidate := range higherScores {
+	for idx, candidate := range s.higher {
 		if candidate == score {
-			return float64(idx+1) / float64(len(higherScores))
+			return float64(idx+1) / float64(len(s.higher))
 		}
 	}
 	return 0
+}
+
+func (s *ModeWeightStatistics) initHigherScores() {
+	if s == nil || s.ready {
+		return
+	}
+	if len(s.sorted) == 0 {
+		s.SortByFrequency()
+	}
+	mode := s.GetMode()
+	s.higher = s.higher[:0]
+	for _, entry := range s.sorted {
+		if entry.Score > mode && entry.Score >= s.scoreMin && entry.Score <= s.scoreMax {
+			s.higher = append(s.higher, entry.Score)
+		}
+	}
+	sort.Float64s(s.higher)
+	s.ready = true
 }

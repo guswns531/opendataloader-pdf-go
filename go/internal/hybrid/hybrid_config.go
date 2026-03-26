@@ -9,6 +9,7 @@ package hybrid
 
 const (
 	BackendOff         = "off"
+	BackendDocling     = "docling"
 	BackendDoclingFast = "docling-fast"
 	BackendHancom      = "hancom"
 	BackendAzure       = "azure"
@@ -21,11 +22,12 @@ const (
 )
 
 const (
-	defaultTimeoutMS     = 30000
-	defaultMaxConcurrent = 4
-	defaultDoclingFast   = "http://localhost:5002"
-	defaultHancomURL     = "https://dataloader.cloud.hancom.com/studio-lite/api"
-	defaultMode          = "auto"
+	DefaultTimeoutMS         = 30000
+	DefaultMaxConcurrent     = 4
+	DefaultDoclingURL        = "http://localhost:5001"
+	DefaultDoclingFastURL    = "http://localhost:5002"
+	DefaultHancomURL         = "https://dataloader.cloud.hancom.com/studio-lite/api"
+	DefaultHybridMode        = "auto"
 )
 
 type HybridConfig struct {
@@ -40,13 +42,24 @@ type HybridConfig struct {
 func DefaultHybridConfig() *HybridConfig {
 	return &HybridConfig{
 		Backend:        BackendOff,
-		Mode:           defaultMode,
-		TimeoutMS:      defaultTimeoutMS,
-		MaxConcurrency: defaultMaxConcurrent,
+		Mode:           DefaultHybridMode,
+		TimeoutMS:      DefaultTimeoutMS,
+		MaxConcurrency: DefaultMaxConcurrent,
 	}
 }
 
-func (c *HybridConfig) effectiveURL() string {
+func DefaultURLForBackend(backend string) string {
+	switch backend {
+	case BackendDocling, BackendDoclingFast:
+		return DefaultDoclingFastURL
+	case BackendHancom:
+		return DefaultHancomURL
+	default:
+		return ""
+	}
+}
+
+func (c *HybridConfig) EffectiveURL() string {
 	if c != nil && c.URL != "" {
 		return c.URL
 	}
@@ -54,19 +67,16 @@ func (c *HybridConfig) effectiveURL() string {
 	if c != nil && c.Backend != "" {
 		backend = c.Backend
 	}
-	switch backend {
-	case BackendDoclingFast:
-		return defaultDoclingFast
-	case BackendHancom:
-		return defaultHancomURL
-	default:
-		return ""
-	}
+	return DefaultURLForBackend(backend)
 }
 
-func (c *HybridConfig) timeoutMS() int {
+func (c *HybridConfig) Timeout() int {
 	if c != nil && c.TimeoutMS > 0 {
 		return c.TimeoutMS
 	}
-	return defaultTimeoutMS
+	return DefaultTimeoutMS
+}
+
+func (c *HybridConfig) IsFullMode() bool {
+	return c != nil && c.Mode == "full"
 }

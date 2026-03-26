@@ -4,6 +4,7 @@
 package processors
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 
@@ -15,7 +16,14 @@ type SpecialTableProcessor struct {
 	AbstractTableProcessor
 }
 
+var koreanSpecialTablePattern = regexp.MustCompile(`^\(?(수신|경유|제목)\)?.*`)
+
 func (p *SpecialTableProcessor) Process(elements []entities.IObject, ctx *containers.ProcessorContext) []entities.IObject {
+	koreanDetected := detectSpecialKoreanTables(elements, ctx)
+	if len(koreanDetected) > 0 {
+		elements = koreanDetected
+	}
+
 	lines := collectTextLines(elements)
 	if len(lines) < 2 {
 		return append([]entities.IObject(nil), elements...)
@@ -50,6 +58,51 @@ func (p *SpecialTableProcessor) Process(elements []entities.IObject, ctx *contai
 		return left.X < right.X
 	})
 	return result
+}
+
+func detectSpecialKoreanTables(elements []entities.IObject, ctx *containers.ProcessorContext) []entities.IObject {
+	result := append([]entities.IObject(nil), elements...)
+	lines := make([]*entities.TextLine, 0)
+	startIndex := -1
+
+	flush := func() {
+		if len(lines) == 0 || startIndex < 0 {
+			lines = nil
+			startIndex = -1
+			return
+		}
+		result[startIndex] = buildSpecialKoreanTable(lines, ctx)
+		for idx := startIndex + 1; idx < startIndex+len(lines); idx++ {
+			result[idx] = nil
+		}
+		lines = nil
+		startIndex = -1
+	}
+
+	for idx, element := range result {
+		line, ok := element.(*entities.TextLine)
+		if !ok {
+			flush()
+			continue
+		}
+		if koreanSpecialTablePattern.MatchString(strings.TrimSpace(line.GetText())) {
+			if startIndex < 0 {
+				startIndex = idx
+			}
+			lines = append(lines, line)
+			continue
+		}
+		flush()
+	}
+	flush()
+
+	filtered := make([]entities.IObject, 0, len(result))
+	for _, element := range result {
+		if element != nil {
+			filtered = append(filtered, element)
+		}
+	}
+	return filtered
 }
 
 func collectTextLines(elements []entities.IObject) []*entities.TextLine {
@@ -184,6 +237,105 @@ func buildAlignedTextTable(lines []*entities.TextLine, positions []float64, ctx 
 		}
 	}
 	return buildTableFromGrid(rowBounds, colBounds, cells, lines[0].GetBBox().Page, ctx)
+}
+
+func buildSpecialKoreanTable(lines []*entities.TextLine, ctx *containers.ProcessorContext) *entities.SemanticTable {
+	rows := make([]*entities.TableRow, 0, len(lines))
+	var tableBox entities.BoundingBox
+	for rowIdx, line := range lines {
+		text := []rune(line.GetText())
+		colon := -1
+		for idx, r := range text {
+			if r == ':' {
+				colon = idx
+				break
+			}
+		}
+		row := &entities.TableRow{
+			Cells: make([]*entities.TableCell, 0, 2),
+			BBox:  line.GetBBox(),
+		}
+		if colon < 0 {
+			cell := &entities.TableCell{
+				Content: []entities.IObject{line},
+				Rowspan: 1,
+				Colspan: 2,
+				BBox:    line.GetBBox(),
+			}
+			row.Cells = append(row.Cells, cell)
+		} else {
+			left := textChunkSliceFromLine(line, 0, colon)
+			right := textChunkSliceFromLine(line, colon+1, len(text))
+			row.Cells = append(row.Cells,
+				&entities.TableCell{Content: objectsForTextChunk(left), Rowspan: 1, Colspan: 1, BBox: textBBoxOrLine(left, line.GetBBox())},
+				&entities.TableCell{Content: objectsForTextChunk(right), Rowspan: 1, Colspan: 1, BBox: textBBoxOrLine(right, line.GetBBox())},
+			)
+		}
+		rows = append(rows, row)
+		if rowIdx == 0 {
+			tableBox = line.GetBBox()
+		} else {
+			tableBox = unionBBox(tableBox, line.GetBBox())
+		}
+	}
+	return normalizeTable(&entities.SemanticTable{
+		BaseObject: entities.BaseObject{
+			ID:   nextObjectID(ctx),
+			BBox: tableBox,
+		},
+		Rows: rows,
+	}, ctx)
+}
+
+func textChunkSliceFromLine(line *entities.TextLine, start, end int) *entities.TextChunk {
+	text := []rune(line.GetText())
+	if start < 0 {
+		start = 0
+	}
+	if end > len(text) {
+		end = len(text)
+	}
+	if start >= end {
+		return nil
+	}
+	box := line.GetBBox()
+	charWidth := box.Width / float64(len(text))
+	if charWidth <= 0 {
+		charWidth = box.Width
+	}
+	value := strings.TrimSpace(string(text[start:end]))
+	if value == "" {
+		return nil
+	}
+	leftOffset := float64(start) * charWidth
+	width := float64(end-start) * charWidth
+	return &entities.TextChunk{
+		BaseObject: entities.BaseObject{
+			BBox: entities.BoundingBox{
+				X:      box.X + leftOffset,
+				Y:      box.Y,
+				Width:  width,
+				Height: box.Height,
+				Page:   box.Page,
+			},
+		},
+		Text:     value,
+		Baseline: line.Baseline,
+	}
+}
+
+func objectsForTextChunk(chunk *entities.TextChunk) []entities.IObject {
+	if chunk == nil {
+		return nil
+	}
+	return []entities.IObject{chunk}
+}
+
+func textBBoxOrLine(chunk *entities.TextChunk, fallback entities.BoundingBox) entities.BoundingBox {
+	if chunk == nil {
+		return fallback
+	}
+	return chunk.GetBBox()
 }
 
 func nearestColumn(bounds []float64, x float64) int {

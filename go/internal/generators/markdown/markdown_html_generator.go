@@ -10,5 +10,5 @@ package markdown
 import "github.com/opendataloader-project/opendataloader-pdf-go/internal/api"
 
 func NewMarkdownHTMLGenerator(config *api.Config) *MarkdownGenerator {
-	return NewMarkdownGenerator(config, true, false)
+	return NewMarkdownGenerator(config, true, true)
 }

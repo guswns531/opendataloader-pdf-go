@@ -6,6 +6,7 @@ package processors
 import (
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/containers"
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
@@ -49,7 +50,7 @@ func (p *TextLineProcessor) Process(
 func groupTextChunksIntoLines(chunks []*entities.TextChunk, ctx *containers.ProcessorContext) []*entities.TextLine {
 	sorted := make([]*entities.TextChunk, 0, len(chunks))
 	for _, chunk := range chunks {
-		if chunk == nil || chunk.Text == "" {
+		if chunk == nil || strings.TrimSpace(chunk.Text) == "" {
 			continue
 		}
 		sorted = append(sorted, chunk)
@@ -145,12 +146,23 @@ func linkTextLinesWithConnectedLineArt(lines []*entities.TextLine, lineArts []*e
 		return lineArts[i].BBox.X < lineArts[j].BBox.X
 	})
 
+	used := make([]bool, len(lineArts))
 	for _, line := range lines {
-		for _, art := range lineArts {
-			if isLineConnectedWithLineArt(line, art) {
-				line.LineArtBullet = art
-				break
+		bestIdx := -1
+		bestGap := math.MaxFloat64
+		for idx, art := range lineArts {
+			if used[idx] || !isLineConnectedWithLineArt(line, art) {
+				continue
 			}
+			gap := line.BBox.X - (art.BBox.X + art.BBox.Width)
+			if gap < bestGap {
+				bestGap = gap
+				bestIdx = idx
+			}
+		}
+		if bestIdx >= 0 {
+			line.LineArtBullet = lineArts[bestIdx]
+			used[bestIdx] = true
 		}
 	}
 }
@@ -169,7 +181,8 @@ func isLineConnectedWithLineArt(line *entities.TextLine, lineArt *entities.LineA
 		return false
 	}
 
-	return math.Abs(line.Baseline-lineArt.BBox.Y) <= lineArtBaselineTolerance &&
+	lineArtY := lineArt.BBox.Y + lineArt.BBox.Height/2
+	return math.Abs(line.Baseline-lineArtY) <= lineArtBaselineTolerance &&
 		lineArt.BBox.Height < listLabelHeightEpsilon*lineHeight
 }
 

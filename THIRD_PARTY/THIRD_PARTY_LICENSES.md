@@ -333,6 +333,11 @@ The following Go modules are used by the Go implementation of opendataloader-pdf
 |-----------|---------|---------|-----|
 | pdfcpu | v0.9.0 | Apache-2.0 | https://github.com/pdfcpu/pdfcpu |
 | cobra | v1.8.1 | Apache-2.0 | https://github.com/spf13/cobra |
+| gojsonschema | v1.2.0 | Apache-2.0 | https://github.com/xeipuuv/gojsonschema |
+| gojsonpointer | v0.0.0-20180127040702-4e3ac2762d5f | Apache-2.0 | https://github.com/xeipuuv/gojsonpointer |
+| gojsonreference | v0.0.0-20180127040603-bd5ef7bd5415 | Apache-2.0 | https://github.com/xeipuuv/gojsonreference |
+| mousetrap | v1.1.0 | Apache-2.0 | https://github.com/inconshreveable/mousetrap |
+| yaml.v2 | v2.4.0 | Apache-2.0 | https://gopkg.in/yaml.v2 |
 
 ### MIT License
 
@@ -340,25 +345,27 @@ The following Go modules are used by the Go implementation of opendataloader-pdf
 |-----------|---------|---------|-----|
 | go-json | v0.10.3 | MIT | https://github.com/goccy/go-json |
 | testify | v1.9.0 | MIT | https://github.com/stretchr/testify |
+| go-runewidth | v0.0.16 | MIT | https://github.com/mattn/go-runewidth |
+| uniseg | v0.4.7 | MIT | https://github.com/rivo/uniseg |
+| yaml.v3 | v3.0.1 | MIT OR Apache-2.0 | https://gopkg.in/yaml.v3 |
 
 ### BSD-3-Clause License
 
 | Component | Version | License | URL |
 |-----------|---------|---------|-----|
 | pflag | v1.0.5 | BSD-3-Clause | https://github.com/spf13/pflag |
+| golang.org/x/image | v0.21.0 | BSD-3-Clause | https://pkg.go.dev/golang.org/x/image |
+| golang.org/x/text | v0.19.0 | BSD-3-Clause | https://pkg.go.dev/golang.org/x/text |
+| hhrutter/tiff | v1.0.1 | BSD-3-Clause | https://github.com/hhrutter/tiff |
+| hhrutter/lzw | v1.0.0 | BSD-3-Clause | https://github.com/hhrutter/lzw |
 
-### Indirect Dependencies (Apache-2.0)
+### Other Go Dependency Licenses
 
-| Component | License | URL |
-|-----------|---------|-----|
-| mousetrap | Apache-2.0 | https://github.com/inconshreveable/mousetrap |
-| hhrutter/tiff | Apache-2.0 | https://github.com/hhrutter/tiff |
-| hhrutter/lzw | Apache-2.0 | https://github.com/hhrutter/lzw |
-| golang.org/x/image | BSD-3-Clause | https://pkg.go.dev/golang.org/x/image |
-| golang.org/x/text | BSD-3-Clause | https://pkg.go.dev/golang.org/x/text |
-| go-runewidth | MIT | https://github.com/mattn/go-runewidth |
-| uniseg | MIT | https://github.com/rivo/uniseg |
-| pkg/errors | BSD-2-Clause | https://github.com/pkg/errors |
+| Component | Version | License | URL |
+|-----------|---------|---------|-----|
+| pkg/errors | v0.9.1 | BSD-2-Clause | https://github.com/pkg/errors |
+| pmezard/go-difflib | v1.0.0 | BSD-3-Clause | https://github.com/pmezard/go-difflib |
+| davecgh/go-spew | v1.1.1 | ISC | https://github.com/davecgh/go-spew |
 
 ---
 

@@ -59,7 +59,7 @@ jobs:
       - name: Sync options
         run: |
           cd go && make sync
-          git diff --exit-code options.json
+          git diff --exit-code ../options.json
 
       - name: Build & Test All
         run: ./scripts/build-all.sh
@@ -98,6 +98,9 @@ jobs:
         with:
           name: go-build
           path: bin/
+
+      - name: Make Go binary executable
+        run: chmod +x bin/opendataloader-pdf
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v4

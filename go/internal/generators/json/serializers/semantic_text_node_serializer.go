@@ -10,6 +10,6 @@ package serializers
 
 import "github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
 
-func SerializeSemanticTextNode(line *entities.TextLine) map[string]interface{} {
-	return SerializeTextLine(line)
+func SerializeSemanticTextNode(textNode *entities.SemanticParagraph) map[string]interface{} {
+	return SerializeParagraph(textNode)
 }

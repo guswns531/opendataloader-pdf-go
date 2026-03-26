@@ -50,7 +50,10 @@ type TextNodeStatistics struct {
 }
 
 func NewTextNodeStatistics() *TextNodeStatistics {
-	cfg := DefaultTextNodeStatisticsConfig()
+	return NewTextNodeStatisticsWithConfig(DefaultTextNodeStatisticsConfig())
+}
+
+func NewTextNodeStatisticsWithConfig(cfg TextNodeStatisticsConfig) *TextNodeStatistics {
 	return &TextNodeStatistics{
 		fontSizeStatistics:   NewModeWeightStatistics(cfg.FontSizeHeadingMin, cfg.FontSizeHeadingMax, cfg.FontSizeDominantMin, cfg.FontSizeDominantMax),
 		fontWeightStatistics: NewModeWeightStatistics(cfg.FontWeightHeadingMin, cfg.FontWeightHeadingMax, cfg.FontWeightDominantMin, cfg.FontWeightDominantMax),
@@ -70,6 +73,10 @@ func (s *TextNodeStatistics) Add(fontSize, fontWeight float64) {
 	s.fontWeightCount++
 	s.fontWeightSum += fontWeight
 	s.fontWeightSumSquares += fontWeight * fontWeight
+}
+
+func (s *TextNodeStatistics) AddTextNode(fontSize, fontWeight float64) {
+	s.Add(fontSize, fontWeight)
 }
 
 func (s *TextNodeStatistics) FontSizeMode() float64 {

@@ -2,8 +2,8 @@
     "engine_name": "opendataloader",
     "engine_version": "local",
     "processor": "Apple M5",
-    "document_count": 5,
-    "total_elapsed": 0.018129825592041016,
-    "elapsed_per_doc": 0.003625965118408203,
+    "document_count": 200,
+    "total_elapsed": 1.2060511112213135,
+    "elapsed_per_doc": 0.006030255556106567,
     "date": "2026-03-26"
 }

@@ -130,6 +130,18 @@ func TestPDFACheckerRejectsNilFeatures(t *testing.T) {
 	}
 }
 
+func TestPDFACheckerSkipsValidationWhenFlavourIsNone(t *testing.T) {
+	checker := verapdfpdfbox.PDFAChecker{Flavour: model.PDFAFlavourNone}
+
+	result := checker.Check(nil)
+
+	assert.True(t, result.IsCompliant)
+	assert.Equal(t, 0, result.TotalRules)
+	assert.Equal(t, 0, result.PassedRules)
+	assert.Equal(t, 0, result.FailedRules)
+	assert.Empty(t, result.Errors)
+}
+
 func TestFeatureExtractorExtractsRealSample(t *testing.T) {
 	samplePath := filepath.Join("..", "..", "..", "..", "samples", "pdf", "1901.03003.pdf")
 

@@ -27,15 +27,13 @@ func SerializeImage(img *entities.SemanticImage, imageOutput string) map[string]
 	}
 
 	out := essentialInfo(img, "image")
-	if img.Alt != "" {
-		out[jsonDescription] = img.Alt
-	}
 
 	switch imageOutput {
 	case api.ImageOutputEmbedded:
-		if dataURL := dataURL(img.Data, imageFormatFromPath(img.ExternalPath)); dataURL != "" {
+		imageFormat := imageFormatFromPath(img.ExternalPath)
+		if dataURL := dataURL(img.Data, imageFormat); dataURL != "" {
 			out[jsonData] = dataURL
-			out[jsonImageFormat] = imageFormatFromPath(img.ExternalPath)
+			out[jsonImageFormat] = imageFormat
 		}
 	case api.ImageOutputExternal:
 		if img.ExternalPath != "" {
@@ -49,7 +47,11 @@ func SerializeImage(img *entities.SemanticImage, imageOutput string) map[string]
 func imageFormatFromPath(path string) string {
 	ext := filepath.Ext(path)
 	if len(ext) > 1 {
-		return ext[1:]
+		format := ext[1:]
+		if format == "jpg" {
+			return "jpeg"
+		}
+		return format
 	}
 	return api.ImageFormatPNG
 }

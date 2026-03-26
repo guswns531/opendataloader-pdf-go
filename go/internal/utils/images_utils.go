@@ -47,3 +47,14 @@ func SaveImageExternal(data []byte, outputDir, baseName string, pageNumber, imag
 	}
 	return fullPath, nil
 }
+
+func IsImageFileExists(fileName string) bool {
+	if strings.TrimSpace(fileName) == "" {
+		return false
+	}
+	info, err := os.Stat(fileName)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir()
+}

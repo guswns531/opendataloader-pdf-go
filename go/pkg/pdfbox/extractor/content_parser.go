@@ -91,6 +91,8 @@ type streamScanner struct {
 	pos  int
 }
 
+const tjSpaceThreshold = -100.0
+
 func extractPageContentBytes(doc *model.PDDocument, pageIdx int) ([]byte, error) {
 	if doc == nil || doc.Context == nil {
 		return nil, fmt.Errorf("pdf document is not open")
@@ -335,6 +337,7 @@ func isDelimiter(ch byte) bool {
 
 func normalizePDFString(b []byte) string {
 	if len(b) >= 2 {
+		// PDF UTF-16 strings are BOM-prefixed.
 		if b[0] == 0xFE && b[1] == 0xFF {
 			runes := make([]rune, 0, (len(b)-2)/2)
 			for i := 2; i+1 < len(b); i += 2 {
@@ -350,6 +353,7 @@ func normalizePDFString(b []byte) string {
 			return string(runes)
 		}
 	}
+	// Most 8-bit PDF text content uses WinAnsiEncoding.
 	return decodeWinAnsi(b)
 }
 
@@ -532,7 +536,6 @@ func decodeTJText(tok streamToken) string {
 	if tok.kind != "array" {
 		return ""
 	}
-	const tjSpaceThreshold = -100.0
 	var sb strings.Builder
 	for _, item := range tok.items {
 		if item.kind == "string" || item.kind == "hex" {

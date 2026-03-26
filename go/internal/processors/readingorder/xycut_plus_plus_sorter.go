@@ -62,7 +62,11 @@ func (s XYCutPlusPlusSorter) Sort(elements []entities.IObject, pageWidth, pageHe
 	}
 
 	preferHorizontalFirst := computeDensityRatio(remaining) > defaultDensityThreshold
-	sortedMain := s.recursiveSegment(remaining, preferHorizontalFirst, 0, pageWidth, pageHeight)
+	sortedMain := s.sortWithColumnAwareness(remaining, preferHorizontalFirst, entities.BoundingBox{
+		X:      0,
+		Width:  pageWidth,
+		Height: pageHeight,
+	})
 	return mergeCrossLayoutElements(sortedMain, crossLayout)
 }
 
@@ -74,27 +78,6 @@ type cutInfo struct {
 func (s XYCutPlusPlusSorter) recursiveSegment(objects []entities.IObject, preferHorizontalFirst bool, regionX, pageWidth, pageHeight float64) []entities.IObject {
 	if len(objects) <= 1 {
 		return cloneObjects(objects)
-	}
-
-	if gapX := detectColumnSplit(objects, regionX, pageWidth); gapX >= 0 {
-		groups := splitByVerticalCut(objects, gapX)
-		if len(groups) > 1 {
-			result := make([]entities.IObject, 0, len(objects))
-			currentX := regionX
-			for idx, group := range groups {
-				width := pageWidth
-				if idx == 0 {
-					width = gapX - regionX
-				} else if idx == len(groups)-1 {
-					width = (regionX + pageWidth) - currentX
-				}
-				result = append(result, s.recursiveSegment(group, preferHorizontalFirst, currentX, width, pageHeight)...)
-				if idx == 0 {
-					currentX = gapX
-				}
-			}
-			return result
-		}
 	}
 
 	horizontalCut := findBestHorizontalCutWithProjection(objects)
@@ -141,6 +124,29 @@ func (s XYCutPlusPlusSorter) recursiveSegment(objects []entities.IObject, prefer
 		result = append(result, s.recursiveSegment(group, preferHorizontalFirst, nextRegionX, nextPageWidth, pageHeight)...)
 	}
 	return result
+}
+
+func (s XYCutPlusPlusSorter) sortWithColumnAwareness(objects []entities.IObject, preferHorizontalFirst bool, region entities.BoundingBox) []entities.IObject {
+	if len(objects) <= 1 {
+		return cloneObjects(objects)
+	}
+
+	if gapX := detectColumnSplit(objects, region.X, region.Width); gapX >= 0 {
+		groups := splitByVerticalCut(objects, gapX)
+		if len(groups) > 1 {
+			result := make([]entities.IObject, 0, len(objects))
+			for _, group := range groups {
+				groupRegion := calculateBoundingRegion(group)
+				if groupRegion.Width <= 0 {
+					groupRegion = region
+				}
+				result = append(result, s.sortWithColumnAwareness(group, preferHorizontalFirst, groupRegion)...)
+			}
+			return result
+		}
+	}
+
+	return s.recursiveSegment(objects, preferHorizontalFirst, region.X, region.Width, region.Height)
 }
 
 func detectColumnSplit(objects []entities.IObject, regionX, regionWidth float64) float64 {

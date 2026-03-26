@@ -150,6 +150,35 @@ func (p *HybridDocumentProcessor) Process(doc *entities.Document, pdfPath string
 		}
 		return p.javaProcessor.processJavaDocument(doc, config, ctx)
 	}
+	if len(backendResp.FailedPageNums) > 0 {
+		failedPages := make(map[int]*entities.Page, len(backendResp.FailedPageNums))
+		for _, pageNum := range backendResp.FailedPageNums {
+			pageIndex := pageNum - 1
+			if pageIndex >= 0 && pageIndex < len(doc.Pages) {
+				failedPages[pageIndex] = doc.Pages[pageIndex]
+			}
+		}
+		if len(failedPages) > 0 {
+			if !config.HybridFallback {
+				return nil, fmt.Errorf("hybrid backend returned partial_success for pages %v", backendResp.FailedPageNums)
+			}
+			fallbackDoc, err := p.javaProcessor.processJavaDocument(
+				cloneDocumentWithPages(doc, pagesFromMap(failedPages)),
+				config,
+				containers.NewProcessorContext(),
+			)
+			if err != nil {
+				return nil, err
+			}
+			if fallbackDoc != nil {
+				for _, page := range fallbackDoc.Pages {
+					if page != nil {
+						resultPages[page.Number] = page
+					}
+				}
+			}
+		}
+	}
 
 	if javaDoc != nil {
 		for _, page := range javaDoc.Pages {

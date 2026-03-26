@@ -38,6 +38,10 @@ func (e *parseError) Unwrap() error {
 }
 
 func main() {
+	os.Exit(run(os.Args[1:]))
+}
+
+func run(args []string) int {
 	opts := &cli.CLIOptions{}
 	rootCmd := &cobra.Command{
 		Use:           "opendataloader-pdf [flags] <file.pdf> [...]",
@@ -46,7 +50,7 @@ func main() {
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.ExportOptions {
-				return cli.ExportOptionsJSON()
+				cli.ExportOptionsAndExit()
 			}
 			if len(args) == 0 {
 				return cmd.Help()
@@ -57,14 +61,22 @@ func main() {
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return &parseError{err: err}
 	})
+	rootCmd.SetArgs(args)
 	cli.AddFlags(rootCmd, opts)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		var parseErr *parseError
 		if errors.As(err, &parseErr) {
-			os.Exit(2)
+			_ = rootCmd.Help()
+			return 2
 		}
-		os.Exit(1)
+		var usageErr *cli.UsageError
+		if errors.As(err, &usageErr) {
+			_ = rootCmd.Help()
+			return 2
+		}
+		return 1
 	}
+	return 0
 }

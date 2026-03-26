@@ -5,6 +5,12 @@
 // You may obtain a copy of the License at
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package pdf
 
@@ -98,7 +104,7 @@ func (w *PDFWriter) drawContent(ctx *pdfcpu_model.Context, pageIdx int, obj enti
 		Height:   bbox.Height,
 		Color:    getColor(obj.GetObjectType()),
 		Opacity:  0.4,
-		Contents: getContents(obj),
+		Contents: annotationContents(obj),
 		OCGRef:   entry.Ref,
 	}); err != nil {
 		return err
@@ -261,6 +267,23 @@ func getContents(obj entities.IObject) string {
 	}
 }
 
+func annotationContents(obj entities.IObject) string {
+	parts := make([]string, 0, 3)
+	if obj != nil && obj.GetID() != "" {
+		parts = append(parts, "id = "+obj.GetID())
+	}
+	if level, ok := objectLevel(obj); ok {
+		parts = append(parts, fmt.Sprintf("level = %s", level))
+	}
+
+	contents := getContents(obj)
+	if contents != "" {
+		parts = append(parts, contents)
+	}
+
+	return strings.Join(parts, ", ")
+}
+
 func getColor(objType entities.ObjectType) [3]float64 {
 	switch objType {
 	case entities.ObjectTypeHeading, entities.ObjectTypeHeaderFooter:
@@ -278,6 +301,21 @@ func getColor(objType entities.ObjectType) [3]float64 {
 	default:
 		return [3]float64{0.9, 0.9, 0.9}
 	}
+}
+
+func objectLevel(obj entities.IObject) (string, bool) {
+	switch v := obj.(type) {
+	case *entities.SemanticHeading:
+		if v.Level > 0 {
+			return fmt.Sprintf("%d", v.Level), true
+		}
+	case *entities.ListItem:
+		if v.Level > 0 {
+			return fmt.Sprintf("%d", v.Level), true
+		}
+	}
+
+	return "", false
 }
 
 func extractText(obj entities.IObject) string {

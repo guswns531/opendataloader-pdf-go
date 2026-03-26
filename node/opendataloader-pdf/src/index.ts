@@ -16,6 +16,20 @@ interface BinaryExecutionOptions {
   streamOutput?: boolean;
 }
 
+function findBinaryOnPath(binaryName: string): string | null {
+  const pathValue = process.env.PATH;
+  if (!pathValue) return null;
+
+  for (const dir of pathValue.split(path.delimiter)) {
+    const candidate = path.join(dir, binaryName);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 function getBinaryPath(): string {
   const platform = process.platform;
   const binaryName = platform === 'win32' ? 'opendataloader-pdf.exe' : 'opendataloader-pdf';
@@ -25,6 +39,9 @@ function getBinaryPath(): string {
 
   const packageBin = path.join(__dirname, '..', 'bin', binaryName);
   if (fs.existsSync(packageBin)) return packageBin;
+
+  const pathBinary = findBinaryOnPath(binaryName);
+  if (pathBinary) return pathBinary;
 
   throw new Error(
     'opendataloader-pdf binary not found. ' +

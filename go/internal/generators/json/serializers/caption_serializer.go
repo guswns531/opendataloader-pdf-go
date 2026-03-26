@@ -22,12 +22,9 @@ func SerializeCaption(c *entities.SemanticCaption) map[string]interface{} {
 	}
 
 	out := essentialInfo(c, "caption")
-	out[jsonContent] = c.Text
 	out[jsonFontType] = ""
-	out[jsonFontSize] = 0.0
+	out[jsonFontSize] = SerializeDouble(0)
 	out[jsonTextColor] = ""
-	if c.RefType != "" {
-		out[jsonDescription] = c.RefType
-	}
+	out[jsonContent] = c.Text
 	return out
 }

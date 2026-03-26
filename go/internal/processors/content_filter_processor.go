@@ -19,16 +19,19 @@ func FilterContent(chunks []*entities.TextChunk, config *api.FilterConfig, pageW
 			continue
 		}
 
+		chunk.IsTiny = isTinyText(chunk)
+		chunk.IsOffPage = isOffPage(chunk.BBox, pageWidth, pageHeight)
+
 		if shouldFilterHiddenText(config) && chunk.IsHidden {
 			continue
 		}
 		if shouldFilterHiddenOCG(config) && chunk.IsHiddenOCG {
 			continue
 		}
-		if shouldFilterTinyText(config) && isTinyText(chunk) {
+		if shouldFilterTinyText(config) && chunk.IsTiny {
 			continue
 		}
-		if shouldFilterOffPage(config) && isOffPage(chunk.BBox, pageWidth, pageHeight) {
+		if shouldFilterOffPage(config) && chunk.IsOffPage {
 			continue
 		}
 
@@ -55,14 +58,13 @@ func shouldFilterOffPage(config *api.FilterConfig) bool {
 }
 
 func isTinyText(chunk *entities.TextChunk) bool {
-	return chunk.FontStyle.FontSize < tinyTextThreshold || chunk.BBox.Height <= tinyTextThreshold
+	return chunk != nil && chunk.FontStyle.FontSize < tinyTextThreshold
 }
 
 func isOffPage(bbox entities.BoundingBox, pageWidth, pageHeight float64) bool {
-	if bbox.Width <= 0 || bbox.Height <= 0 {
-		return true
+	if pageWidth <= 0 || pageHeight <= 0 {
+		return false
 	}
-
 	return bbox.X+bbox.Width <= 0 ||
 		bbox.Y+bbox.Height <= 0 ||
 		bbox.X >= pageWidth ||

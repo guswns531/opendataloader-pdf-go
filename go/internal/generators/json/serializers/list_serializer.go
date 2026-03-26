@@ -24,15 +24,17 @@ func SerializeList(list *entities.PDFList) map[string]interface{} {
 	out := essentialInfo(list, "list")
 	out[jsonNumberingStyle] = numberingStyle(list)
 	out[jsonNumberOfListItems] = len(list.Items)
+	if previousID, ok := previousListID(list); ok {
+		out[jsonPreviousListID] = previousID
+	}
+	if nextID, ok := nextListID(list); ok {
+		out[jsonNextListID] = nextID
+	}
 
 	items := make([]interface{}, 0, len(list.Items))
-	for idx, item := range list.Items {
+	for _, item := range list.Items {
 		if item == nil {
 			continue
-		}
-		if idx > 0 && list.Items[idx-1] != nil && list.Items[idx-1].ID != "" {
-			item = cloneListItem(item)
-			item.Level = max(item.Level, 1)
 		}
 		items = append(items, SerializeListItem(item))
 	}
@@ -40,14 +42,17 @@ func SerializeList(list *entities.PDFList) map[string]interface{} {
 	return out
 }
 
-func cloneListItem(item *entities.ListItem) *entities.ListItem {
-	cloned := *item
-	return &cloned
+func previousListID(list *entities.PDFList) (int, bool) {
+	if len(list.Items) == 0 || list.Items[0] == nil {
+		return 0, false
+	}
+	return parseNumericID(list.Items[0].GetID())
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
+func nextListID(list *entities.PDFList) (int, bool) {
+	lastIndex := len(list.Items) - 1
+	if lastIndex < 0 || list.Items[lastIndex] == nil {
+		return 0, false
 	}
-	return b
+	return parseNumericID(list.Items[lastIndex].GetID())
 }

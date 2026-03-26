@@ -21,13 +21,23 @@ func getColor(objType entities.ObjectType) [3]float64
 
 func TestGetColor(t *testing.T) {
 	assert.Equal(t, [3]float64{0, 0, 1}, getColor(entities.ObjectTypeHeading))
+	assert.Equal(t, [3]float64{0, 0, 1}, getColor(entities.ObjectTypeHeaderFooter))
 	assert.Equal(t, [3]float64{0, 1, 0}, getColor(entities.ObjectTypeList))
+	assert.Equal(t, [3]float64{0, 1, 1}, getColor(entities.ObjectTypeParagraph))
+	assert.Equal(t, [3]float64{1, 0, 0}, getColor(entities.ObjectTypeImage))
 	assert.Equal(t, [3]float64{1, 0, 1}, getColor(entities.ObjectTypeTable))
+	assert.Equal(t, [3]float64{1, 1, 0}, getColor(entities.ObjectTypeCaption))
+	assert.Equal(t, [3]float64{0.9, 0.9, 0.9}, getColor(entities.ObjectTypeUnknown))
 }
 
 func TestPDFLayerValues(t *testing.T) {
 	assert.Equal(t, internalpdf.PDFLayer("content"), internalpdf.PDFLayerContent)
 	assert.Equal(t, internalpdf.PDFLayer("table cells"), internalpdf.PDFLayerTableCells)
+	assert.Equal(t, internalpdf.PDFLayer("list items"), internalpdf.PDFLayerListItems)
+	assert.Equal(t, internalpdf.PDFLayer("table content"), internalpdf.PDFLayerTableContent)
+	assert.Equal(t, internalpdf.PDFLayer("list content"), internalpdf.PDFLayerListContent)
+	assert.Equal(t, internalpdf.PDFLayer("text blocks content"), internalpdf.PDFLayerTextBlockContent)
+	assert.Equal(t, internalpdf.PDFLayer("header and footer content"), internalpdf.PDFLayerHeaderFooterContent)
 }
 
 func TestPDFWriterUpdatePDFCreatesAnnotatedOutput(t *testing.T) {

@@ -98,14 +98,11 @@ type doclingBBox struct {
 }
 
 func TransformDoclingResponse(data []byte) ([]*entities.Page, error) {
-	var root doclingRoot
-	if err := json.Unmarshal(data, &root); err == nil && root.Document != nil && len(root.Document.JSONContent) > 0 {
-		if root.Status == "failure" {
-			return nil, fmt.Errorf("docling processing failed: %s", string(root.Errors))
-		}
-		return transformDoclingDocument(root.Document.JSONContent)
+	parsed, err := parseDoclingResponse(data)
+	if err != nil {
+		return nil, err
 	}
-	return transformDoclingDocument(data)
+	return parsed.Pages, nil
 }
 
 func transformDoclingDocument(data []byte) ([]*entities.Page, error) {

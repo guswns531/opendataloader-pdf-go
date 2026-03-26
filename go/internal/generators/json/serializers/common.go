@@ -18,7 +18,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/api"
@@ -57,6 +56,7 @@ const (
 	jsonData              = "data"
 	jsonImageFormat       = "format"
 	jsonDescription       = "description"
+	jsonLinkedContentID   = "linked content id"
 )
 
 func essentialInfo(object entities.IObject, objectType string) map[string]interface{} {
@@ -66,21 +66,39 @@ func essentialInfo(object entities.IObject, objectType string) map[string]interf
 		jsonPageNumber:  bbox.Page + 1,
 		jsonBoundingBox: []interface{}{serializeDouble(bbox.X), serializeDouble(bbox.Y), serializeDouble(bbox.X + bbox.Width), serializeDouble(bbox.Y + bbox.Height)},
 	}
-	if id, ok := numericID(object.GetID()); ok {
-		out[jsonID] = id
+	if id := object.GetID(); id != "" && id != "0" {
+		if numericID, ok := parseNumericID(id); ok {
+			out[jsonID] = numericID
+		}
+	}
+	if level := objectLevel(object); level != "" {
+		out[jsonLevel] = level
 	}
 	return out
 }
 
-func numericID(raw string) (int, bool) {
+func parseNumericID(raw string) (int, bool) {
 	if raw == "" {
 		return 0, false
 	}
-	id, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0, false
+	value := 0
+	for _, ch := range raw {
+		if ch < '0' || ch > '9' {
+			return 0, false
+		}
+		value = value*10 + int(ch-'0')
 	}
-	return id, true
+	return value, true
+}
+
+func objectLevel(object entities.IObject) string {
+	switch typed := object.(type) {
+	case *entities.ListItem:
+		if typed.Level > 0 {
+			return fmt.Sprintf("%d", typed.Level)
+		}
+	}
+	return ""
 }
 
 func serializeTextChunks(chunks []*entities.TextChunk) string {
@@ -137,35 +155,19 @@ func firstChunkFromObjects(objects []entities.IObject) *entities.TextChunk {
 }
 
 func textInfoFromLines(lines []*entities.TextLine) map[string]interface{} {
-	return textInfoFromChunkAndContent(firstChunkFromLines(lines), serializeLines(lines), false)
+	return textInfoFromChunkAndContent(firstChunkFromLines(lines), serializeLines(lines), hiddenFromLines(lines))
 }
 
 func textInfoFromObjects(objects []entities.IObject, content string) map[string]interface{} {
-	hidden := false
-	for _, object := range objects {
-		switch typed := object.(type) {
-		case *entities.TextChunk:
-			if typed.IsHidden || typed.IsHiddenOCG || typed.IsOffPage || typed.IsTiny {
-				hidden = true
-			}
-		case *entities.TextLine:
-			for _, chunk := range typed.Chunks {
-				if chunk != nil && (chunk.IsHidden || chunk.IsHiddenOCG || chunk.IsOffPage || chunk.IsTiny) {
-					hidden = true
-					break
-				}
-			}
-		}
-		if hidden {
-			break
-		}
-	}
-	return textInfoFromChunkAndContent(firstChunkFromObjects(objects), content, hidden)
+	return textInfoFromChunkAndContent(firstChunkFromObjects(objects), content, hiddenFromObjects(objects))
 }
 
 func textInfoFromChunkAndContent(chunk *entities.TextChunk, content string, hidden bool) map[string]interface{} {
 	out := map[string]interface{}{
-		jsonContent: content,
+		jsonFontType:  "",
+		jsonFontSize:  serializeDouble(0),
+		jsonTextColor: "",
+		jsonContent:   content,
 	}
 	if chunk != nil {
 		if chunk.FontStyle.FontName != "" {
@@ -180,6 +182,52 @@ func textInfoFromChunkAndContent(chunk *entities.TextChunk, content string, hidd
 		}
 	}
 	return out
+}
+
+func hiddenFromLines(lines []*entities.TextLine) bool {
+	for _, line := range lines {
+		if line == nil {
+			continue
+		}
+		for _, chunk := range line.Chunks {
+			if isHiddenChunk(chunk) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hiddenFromObjects(objects []entities.IObject) bool {
+	for _, object := range objects {
+		switch typed := object.(type) {
+		case *entities.TextChunk:
+			if isHiddenChunk(typed) {
+				return true
+			}
+		case *entities.TextLine:
+			if hiddenFromLines([]*entities.TextLine{typed}) {
+				return true
+			}
+		case *entities.SemanticParagraph:
+			if hiddenFromLines(typed.Lines) {
+				return true
+			}
+		case *entities.SemanticHeading:
+			if hiddenFromLines(typed.Lines) {
+				return true
+			}
+		case *entities.SemanticHeaderFooter:
+			if hiddenFromLines(typed.Lines) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isHiddenChunk(chunk *entities.TextChunk) bool {
+	return chunk != nil && (chunk.IsHidden || chunk.IsHiddenOCG || chunk.IsOffPage || chunk.IsTiny)
 }
 
 func serializeElements(elements []entities.IObject) []interface{} {
@@ -204,16 +252,18 @@ func serializeElements(elements []entities.IObject) []interface{} {
 			out = append(out, SerializeListItem(typed))
 		case *entities.SemanticImage:
 			out = append(out, SerializeImage(typed, api.ImageOutputExternal))
+		case *entities.LineArtChunk:
+			continue
 		case *entities.SemanticFormula:
 			out = append(out, SerializeFormula(typed))
 		case *entities.SemanticCaption:
 			out = append(out, SerializeCaption(typed))
 		case *entities.TextChunk:
-			out = append(out, SerializeTextChunkContentElement(typed))
+			out = append(out, SerializeTextChunk(typed))
 		case *entities.SemanticHeaderFooter:
 			out = append(out, SerializeHeaderFooter(typed))
 		case *entities.TextLine:
-			out = append(out, SerializeTextLineContentElement(typed))
+			out = append(out, SerializeTextLine(typed))
 		}
 	}
 	return out

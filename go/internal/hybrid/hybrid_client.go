@@ -16,8 +16,9 @@ type ConvertRequest struct {
 }
 
 type ConvertResponse struct {
-	Pages []*entities.Page
-	Error error
+	Pages          []*entities.Page
+	FailedPageNums []int
+	Error          error
 }
 
 type HybridClient interface {

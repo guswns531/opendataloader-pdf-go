@@ -39,7 +39,6 @@ func (w *JsonWriter) Write(doc *entities.Document) ([]byte, error) {
 	}
 
 	payload := serializeMetadata(doc.Metadata)
-	payload["pages"] = w.serializePages(doc.Pages)
 
 	kids := make([]interface{}, 0)
 	for _, page := range doc.Pages {
@@ -59,6 +58,9 @@ func (w *JsonWriter) serializeElements(elements []entities.IObject) []interface{
 		if element == nil {
 			continue
 		}
+		if _, isLineArt := element.(*entities.LineArtChunk); isLineArt {
+			continue
+		}
 		switch typed := element.(type) {
 		case *entities.SemanticTable:
 			out = append(out, serializers.SerializeTable(typed))
@@ -75,28 +77,16 @@ func (w *JsonWriter) serializeElements(elements []entities.IObject) []interface{
 		case *entities.SemanticCaption:
 			out = append(out, serializers.SerializeCaption(typed))
 		case *entities.TextChunk:
-			out = append(out, serializers.SerializeTextChunkContentElement(typed))
+			out = append(out, serializers.SerializeTextChunk(typed))
 		case *entities.TextLine:
-			out = append(out, serializers.SerializeTextLineContentElement(typed))
+			out = append(out, serializers.SerializeTextLine(typed))
 		case *entities.SemanticHeaderFooter:
 			out = append(out, serializers.SerializeHeaderFooter(typed))
-		}
-	}
-	return out
-}
-
-func (w *JsonWriter) serializePages(pages []*entities.Page) []interface{} {
-	out := make([]interface{}, 0, len(pages))
-	for _, page := range pages {
-		if page == nil {
+		case *entities.ListItem:
+			out = append(out, serializers.SerializeListItem(typed))
+		case *entities.LineArtChunk:
 			continue
 		}
-		out = append(out, map[string]interface{}{
-			PageNumber: page.Number + 1,
-			"width":    SerializeDouble(page.Width),
-			"height":   SerializeDouble(page.Height),
-			Kids:       w.serializeElements(page.Elements),
-		})
 	}
 	return out
 }
@@ -119,12 +109,6 @@ func serializeMetadata(metadata entities.DocumentMetadata) map[string]interface{
 	}
 	if metadata.Title != "" {
 		out[Title] = metadata.Title
-	}
-	if metadata.Creator != "" {
-		out["creator"] = metadata.Creator
-	}
-	if metadata.Producer != "" {
-		out["producer"] = metadata.Producer
 	}
 	return out
 }

@@ -9,6 +9,8 @@ package levels
 
 type ListLevelInfo struct {
 	LevelInfo
-	BulletText string
-	IsOrdered  bool
+	CommonPrefix   string
+	NumberingStyle string
+	BulletText     string
+	IsOrdered      bool
 }

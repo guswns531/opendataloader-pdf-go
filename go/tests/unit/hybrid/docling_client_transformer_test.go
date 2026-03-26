@@ -8,8 +8,9 @@
 package hybrid_test
 
 import (
+	"bytes"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -76,14 +77,18 @@ func TestTransformDoclingResponseBuildsPagesAndElements(t *testing.T) {
 }
 
 func TestDoclingFastServerClientHealthCheckAndConvert(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	pdfPath := filepath.Join(t.TempDir(), "dummy.pdf")
+	require.NoError(t, os.WriteFile(pdfPath, []byte("%PDF-1.4\n%%EOF"), 0o644))
+
+	client := hybrid.NewDoclingFastServerClientWithHTTPClient(&hybrid.HybridConfig{
+		Backend: hybrid.BackendDoclingFast,
+		URL:     "http://docling.test",
+	}, &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
 		case "/health":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("ok"))
+			return jsonResponse(http.StatusOK, "ok"), nil
 		case "/v1/convert/file":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{
+			return jsonResponse(http.StatusOK, `{
 			  "document": {
 			    "json_content": {
 			      "pages": {"1": {"width": 600, "height": 800}},
@@ -98,32 +103,84 @@ func TestDoclingFastServerClientHealthCheckAndConvert(t *testing.T) {
 			    }
 			  },
 			  "status": "success"
-			}`))
+			}`), nil
 		default:
-			w.WriteHeader(http.StatusNotFound)
+			return jsonResponse(http.StatusNotFound, ""), nil
 		}
-	}))
-	defer server.Close()
-
-	pdfPath := filepath.Join(t.TempDir(), "dummy.pdf")
-	require.NoError(t, os.WriteFile(pdfPath, []byte("%PDF-1.4\n%%EOF"), 0o644))
-
-	client := hybrid.NewDoclingFastServerClient(&hybrid.HybridConfig{
-		Backend: hybrid.BackendDoclingFast,
-		URL:     server.URL,
-	})
+	})})
 
 	require.NoError(t, client.HealthCheck())
 	resp, err := client.Convert(&hybrid.ConvertRequest{
 		PDFPath:  pdfPath,
-		PageNums: []int{2},
+		PageNums: []int{1},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	require.Len(t, resp.Pages, 1)
 	require.NotNil(t, resp.Pages[0])
-	assert.Equal(t, 1, resp.Pages[0].Number)
+	assert.Equal(t, 0, resp.Pages[0].Number)
 	heading, ok := resp.Pages[0].Elements[0].(*entities.SemanticHeading)
 	assert.True(t, ok)
 	assert.Equal(t, "Backend heading", heading.Lines[0].GetText())
+}
+
+func TestDoclingFastServerClientReturnsFailedPagesOnPartialSuccess(t *testing.T) {
+	pdfPath := filepath.Join(t.TempDir(), "dummy.pdf")
+	require.NoError(t, os.WriteFile(pdfPath, []byte("%PDF-1.4\n%%EOF"), 0o644))
+
+	client := hybrid.NewDoclingFastServerClientWithHTTPClient(&hybrid.HybridConfig{
+		Backend: hybrid.BackendDoclingFast,
+		URL:     "http://docling.test",
+	}, &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/health":
+			return jsonResponse(http.StatusOK, "ok"), nil
+		case "/v1/convert/file":
+			return jsonResponse(http.StatusOK, `{
+			  "document": {
+			    "json_content": {
+			      "pages": {
+			        "2": {"width": 600, "height": 800},
+			        "3": {"width": 600, "height": 800}
+			      },
+			      "texts": [{
+			        "label": "text",
+			        "text": "page two",
+			        "prov": [{"page_no": 2, "bbox": {"l": 10, "t": 20, "r": 110, "b": 60, "coord_origin": "TOPLEFT"}}]
+			      }],
+			      "tables": [],
+			      "pictures": []
+			    }
+			  },
+			  "status": "partial_success",
+			  "failed_pages": [3]
+			}`), nil
+		default:
+			return jsonResponse(http.StatusNotFound, ""), nil
+		}
+	})})
+
+	resp, err := client.Convert(&hybrid.ConvertRequest{
+		PDFPath:  pdfPath,
+		PageNums: []int{2, 3},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, []int{3}, resp.FailedPageNums)
+	require.Len(t, resp.Pages, 2)
+	assert.Equal(t, 1, resp.Pages[0].Number)
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return fn(r)
+}
+
+func jsonResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(bytes.NewBufferString(body)),
+	}
 }

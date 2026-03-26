@@ -17,8 +17,8 @@ import (
 )
 
 var (
-	orderedBulletPattern   = regexp.MustCompile(`^\s*(?:\(?\d+\)|\d+[\.\)]|[가-힣A-Za-z][\.\)]|[Ⅰ-Ⅻⅰ-ⅻ①-⑳⑴-⒇⒈-⒛❶-❿➀-➉➊-➓])\s*`)
-	unorderedBulletPattern = regexp.MustCompile(`^\s*[∘*+\-•‣∙▪■□▢▣▤▥▦▧▨▩◆◇○●◦◯☐☑☒✓✔❍❏❐❑⬛⬜⭐]\s*`)
+	orderedBulletPattern   = regexp.MustCompile(`^(\d+\.|\([a-zA-Z0-9]+\)|[a-zA-Z]\.)`)
+	unorderedBulletPattern = regexp.MustCompile(`^[•\-※◦▪▸►\*]`)
 	koreanAttachPattern    = regexp.MustCompile(`^붙\s*임`)
 )
 
@@ -97,17 +97,22 @@ func (p *ListProcessor) consumeListItem(elements []entities.IObject, start int, 
 	content := []entities.IObject{bodyLine}
 	box := bodyLine.BBox
 	next := start + 1
+	previousLine := bodyLine
 
 	for next < len(elements) {
 		nextLine, ok := elements[next].(*entities.TextLine)
-		if !ok || isBulletLine(nextLine) {
-			break
+		if ok {
+			if isBulletLine(nextLine) || !isListContinuation(line, previousLine, nextLine) {
+				break
+			}
+			content = append(content, nextLine)
+			box = unionBox(box, nextLine.BBox)
+			previousLine = nextLine
+			next++
+			continue
 		}
-		if !isListContinuation(line, nextLine) {
-			break
-		}
-		content = append(content, nextLine)
-		box = unionBox(box, nextLine.BBox)
+		content = append(content, elements[next])
+		box = unionBox(box, elements[next].GetBBox())
 		next++
 	}
 
@@ -120,19 +125,32 @@ func (p *ListProcessor) consumeListItem(elements []entities.IObject, start int, 
 	}, next
 }
 
-func isListContinuation(first, current *entities.TextLine) bool {
-	if current == nil || first == nil {
+func isListContinuation(first, previous, current *entities.TextLine) bool {
+	if current == nil || first == nil || previous == nil {
 		return false
 	}
-	if current.BBox.X+0.01 < first.BBox.X {
+	maxXGap := max(lineFontSize(first)*0.3, 4)
+	if current.BBox.X < first.BBox.X-maxXGap {
 		return false
 	}
-	lineGap := abs(current.Baseline - first.Baseline)
-	height := max(first.BBox.Height, current.BBox.Height)
-	if height == 0 {
+	if utils.IsLabeledLine(current) {
+		return false
+	}
+	if len(current.Chunks) > 0 && current.Chunks[0] != nil && current.Chunks[0].IsHidden {
+		return false
+	}
+	if previous != first {
+		if current.BBox.X+maxXGap < previous.BBox.X {
+			return false
+		}
 		return true
 	}
-	return lineGap <= baselineDiffThreshold*height || current.BBox.X > first.BBox.X+first.BBox.Height
+	lineGap := abs(previous.Baseline - current.Baseline)
+	nextGap := max(current.BBox.Height, previous.BBox.Height)
+	if nextGap <= 0 {
+		return true
+	}
+	return lineGap <= baselineDiffThreshold*nextGap || current.BBox.X > first.BBox.X+first.BBox.Height
 }
 
 func isBulletLine(line *entities.TextLine) bool {
@@ -182,9 +200,11 @@ func bulletPatternKey(text string, ordered bool) string {
 	switch {
 	case ordered:
 		switch {
-		case regexp.MustCompile(`^\(?\d+[\.\)]?$`).MatchString(value):
+		case regexp.MustCompile(`^\d+\.$`).MatchString(value):
 			return "ordered-numeric"
-		case regexp.MustCompile(`^[A-Za-z][\.\)]?$`).MatchString(value):
+		case regexp.MustCompile(`^\([A-Za-z0-9]+\)$`).MatchString(value):
+			return "ordered-paren"
+		case regexp.MustCompile(`^[A-Za-z]\.$`).MatchString(value):
 			return "ordered-alpha"
 		default:
 			return "ordered-other"
@@ -247,4 +267,11 @@ func abs(v float64) float64 {
 		return -v
 	}
 	return v
+}
+
+func max(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }

@@ -1,10 +1,16 @@
 // Copyright 2025-2026 Hancom Inc.
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+// You may obtain a copy of the License at
 //
-// This package provides functionality equivalent to Apache PDFBox 3.0.4
-// (https://pdfbox.apache.org/), implemented using pdfcpu.
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package ocg
 
@@ -44,6 +50,9 @@ func SetupOCProperties(ctx *pdfcpu_model.Context) error {
 			"D": types.Dict(
 				map[string]types.Object{
 					"AS":       types.Array{},
+					"OFF":      types.Array{},
+					"ListMode": types.Name("VisiblePages"),
+					"Name":     types.StringLiteral("Default"),
 					"ON":       types.Array{},
 					"Order":    types.Array{},
 					"RBGroups": types.Array{},
@@ -125,31 +134,7 @@ func AddOCG(ctx *pdfcpu_model.Context, name string) (*OptionalContentGroup, erro
 	if err != nil {
 		return nil, err
 	}
-	if len(as) == 0 {
-		dict.Update("AS", types.Array{
-			types.Dict(
-				map[string]types.Object{
-					"Category": types.NewNameArray("View"),
-					"Event":    types.Name("View"),
-					"OCGs":     types.Array{*indRef},
-				},
-			),
-			types.Dict(
-				map[string]types.Object{
-					"Category": types.NewNameArray("Print"),
-					"Event":    types.Name("Print"),
-					"OCGs":     types.Array{*indRef},
-				},
-			),
-			types.Dict(
-				map[string]types.Object{
-					"Category": types.NewNameArray("Export"),
-					"Event":    types.Name("Export"),
-					"OCGs":     types.Array{*indRef},
-				},
-			),
-		})
-	}
+	dict.Update("AS", appendOrCreateUsageApplications(as, *indRef))
 
 	return &OptionalContentGroup{Name: name, Visible: true, Ref: indRef.ObjectNumber.Value()}, nil
 }
@@ -189,6 +174,10 @@ func EnableOCG(ctx *pdfcpu_model.Context, group *OptionalContentGroup, enabled b
 	if err != nil {
 		return err
 	}
+	off, err := arrayEntry(ctx, dict, "OFF")
+	if err != nil {
+		return err
+	}
 
 	targetRef := *types.NewIndirectRef(group.Ref, 0)
 	filtered := make(types.Array, 0, len(on))
@@ -203,6 +192,19 @@ func EnableOCG(ctx *pdfcpu_model.Context, group *OptionalContentGroup, enabled b
 		filtered = append(filtered, targetRef)
 	}
 	dict.Update("ON", filtered)
+
+	filteredOff := make(types.Array, 0, len(off))
+	for _, obj := range off {
+		indRef, ok := obj.(types.IndirectRef)
+		if ok && indRef.ObjectNumber.Value() == group.Ref {
+			continue
+		}
+		filteredOff = append(filteredOff, obj)
+	}
+	if !enabled {
+		filteredOff = append(filteredOff, targetRef)
+	}
+	dict.Update("OFF", filteredOff)
 	group.Visible = enabled
 	return nil
 }
@@ -219,4 +221,54 @@ func arrayEntry(ctx *pdfcpu_model.Context, dict types.Dict, key string) (types.A
 	}
 
 	return arr, nil
+}
+
+func appendOrCreateUsageApplications(existing types.Array, indRef types.IndirectRef) types.Array {
+	if len(existing) == 0 {
+		return types.Array{
+			usageApplication("View", indRef),
+			usageApplication("Print", indRef),
+			usageApplication("Export", indRef),
+		}
+	}
+
+	out := make(types.Array, 0, len(existing))
+	for _, obj := range existing {
+		d, ok := obj.(types.Dict)
+		if !ok {
+			out = append(out, obj)
+			continue
+		}
+
+		ocgs, ok := d["OCGs"].(types.Array)
+		if !ok {
+			d["OCGs"] = types.Array{indRef}
+		} else if !containsIndirectRef(ocgs, indRef.ObjectNumber.Value()) {
+			d["OCGs"] = append(ocgs, indRef)
+		}
+		out = append(out, d)
+	}
+
+	return out
+}
+
+func usageApplication(event string, indRef types.IndirectRef) types.Dict {
+	return types.Dict(
+		map[string]types.Object{
+			"Category": types.NewNameArray(event),
+			"Event":    types.Name(event),
+			"OCGs":     types.Array{indRef},
+		},
+	)
+}
+
+func containsIndirectRef(arr types.Array, objNr int) bool {
+	for _, obj := range arr {
+		indRef, ok := obj.(types.IndirectRef)
+		if ok && indRef.ObjectNumber.Value() == objNr {
+			return true
+		}
+	}
+
+	return false
 }

@@ -15,21 +15,22 @@ import (
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
 )
 
-var captionPattern = regexp.MustCompile(`^(?:그림|Fig(?:ure)?|표|Table|도표)\s*[:.]?\s*[A-Za-z0-9가-힣\-\.]+`)
+var captionPattern = regexp.MustCompile(`^(?:그림|Fig|Figure|표|Table|도표)\s*[\d\-\.]+`)
 
 type CaptionProcessor struct{}
 
 func (p *CaptionProcessor) Process(elements []entities.IObject, ctx *containers.ProcessorContext) []entities.IObject {
 	out := make([]entities.IObject, 0, len(elements))
-	for _, element := range elements {
+	for idx, element := range elements {
 		text := objectText(element)
 		if text == "" || !captionPattern.MatchString(strings.TrimSpace(text)) {
 			out = append(out, element)
 			continue
 		}
-		refType := "figure"
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(text)), "표") || strings.HasPrefix(strings.ToLower(strings.TrimSpace(text)), "table") {
-			refType = "table"
+		refType, ok := captionReferenceType(elements, idx, strings.TrimSpace(text))
+		if !ok {
+			out = append(out, element)
+			continue
 		}
 		out = append(out, &entities.SemanticCaption{
 			BaseObject: entities.BaseObject{ID: nextID(ctx), BBox: element.GetBBox()},
@@ -38,4 +39,34 @@ func (p *CaptionProcessor) Process(elements []entities.IObject, ctx *containers.
 		})
 	}
 	return out
+}
+
+func captionReferenceType(elements []entities.IObject, idx int, text string) (string, bool) {
+	if strings.HasPrefix(text, "표") || strings.HasPrefix(strings.ToLower(text), "table") {
+		return "table", len(elements) == 1 || hasCaptionTarget(elements, idx, entities.ObjectTypeTable)
+	}
+	return "figure", len(elements) == 1 || hasCaptionTarget(elements, idx, entities.ObjectTypeImage) || hasCaptionTarget(elements, idx, entities.ObjectTypeTable)
+}
+
+func hasCaptionTarget(elements []entities.IObject, idx int, objectType entities.ObjectType) bool {
+	return matchesCaptionTarget(neighborObject(elements, idx, -1), objectType) || matchesCaptionTarget(neighborObject(elements, idx, 1), objectType)
+}
+
+func neighborObject(elements []entities.IObject, idx, step int) entities.IObject {
+	for pos := idx + step; pos >= 0 && pos < len(elements); pos += step {
+		if elements[pos] != nil {
+			return elements[pos]
+		}
+	}
+	return nil
+}
+
+func matchesCaptionTarget(obj entities.IObject, objectType entities.ObjectType) bool {
+	if obj == nil {
+		return false
+	}
+	if obj.GetObjectType() == objectType {
+		return true
+	}
+	return objectType == entities.ObjectTypeImage && obj.GetObjectType() == entities.ObjectTypeTable
 }

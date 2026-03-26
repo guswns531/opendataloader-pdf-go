@@ -173,3 +173,41 @@ func TestEndToEnd(t *testing.T) {
 	sampleCfg.Formats = []string{api.FormatMarkdown}
 	require.NoError(t, api.ProcessFile(pdfPath, sampleCfg))
 }
+
+func TestEndToEndWithContent(t *testing.T) {
+	samplesDir := filepath.Join("..", "..", "..", "samples")
+
+	var pdfPath string
+	err := filepath.WalkDir(samplesDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.EqualFold(filepath.Ext(path), ".pdf") {
+			return nil
+		}
+		pdfPath = path
+		return fs.SkipAll
+	})
+	require.NoError(t, err)
+	if pdfPath == "" {
+		t.Skip("no sample PDFs found")
+	}
+
+	outputDir := t.TempDir()
+	cfg := api.DefaultConfig()
+	cfg.OutputDir = outputDir
+	cfg.Formats = []string{api.FormatMarkdown}
+	cfg.ContentSafetyOff = []string{"all"}
+
+	require.NoError(t, api.ProcessFile(pdfPath, cfg))
+
+	base := strings.TrimSuffix(filepath.Base(pdfPath), filepath.Ext(pdfPath))
+	markdownPath := filepath.Join(outputDir, base+".md")
+	assert.FileExists(t, markdownPath)
+
+	markdownBytes, err := os.ReadFile(markdownPath)
+	require.NoError(t, err)
+	markdownContent := strings.TrimSpace(string(markdownBytes))
+	t.Logf("sample markdown length for %s: %d", filepath.Base(pdfPath), len(markdownContent))
+	assert.NotEmpty(t, markdownContent, "markdown output should not be empty for real PDF")
+}

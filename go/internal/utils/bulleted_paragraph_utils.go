@@ -8,6 +8,7 @@
 package utils
 
 import (
+	"math"
 	"regexp"
 	"strings"
 
@@ -25,6 +26,7 @@ var (
 	koreanNumbersRegex = `[가나다라마바사아자차카타파하거너더러머버서어저처커터퍼허고노도로모보소오조초코토포호구누두루무부수우주추쿠투푸후그느드르므브스으즈츠크트프흐기니디리미비시이지치키티피히]`
 
 	orderedBulletRegexes = []*regexp.Regexp{
+		regexp.MustCompile(`^(\d+\.|[a-zA-Z]\.|[①-⑳]|[ⓐ-ⓩ]|\([0-9]+\)).*`),
 		regexp.MustCompile(`^\(\d+\).*`),
 		regexp.MustCompile(`^<\d+>.*`),
 		regexp.MustCompile(`^\[\d+\].*`),
@@ -61,6 +63,62 @@ var (
 	}
 )
 
+func IsBulletedParagraph(line *entities.TextLine) bool {
+	return IsBulletedLine(line)
+}
+
+func IsBulletedLine(line *entities.TextLine) bool {
+	return IsLabeledLine(line)
+}
+
+func IsLabeledLine(line *entities.TextLine) bool {
+	if line == nil {
+		return false
+	}
+	value := strings.TrimSpace(line.GetText())
+	if value == "" {
+		return false
+	}
+	first := []rune(value)[0]
+	if strings.ContainsRune(possibleLabels, first) || line.LineArtBullet != nil {
+		return true
+	}
+	for _, re := range orderedBulletRegexes {
+		if re.MatchString(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func IsBulletedLineArtParagraph(line *entities.TextLine) bool {
+	return line != nil && line.LineArtBullet != nil
+}
+
+func GetLabel(line *entities.TextLine) string {
+	if line == nil {
+		return ""
+	}
+	value := strings.TrimSpace(line.GetText())
+	if value == "" {
+		return ""
+	}
+	return string([]rune(value)[0])
+}
+
+func GetLabelRegex(line *entities.TextLine) string {
+	if line == nil {
+		return ""
+	}
+	value := strings.TrimSpace(line.GetText())
+	for _, re := range orderedBulletRegexes {
+		if re.MatchString(value) {
+			return re.String()
+		}
+	}
+	return ""
+}
+
 func IsOrderedBullet(text string) bool {
 	value := strings.TrimSpace(text)
 	for _, re := range orderedBulletRegexes {
@@ -87,19 +145,13 @@ func GetIndentLevel(line *entities.TextLine, pageWidth float64) int {
 	if line == nil || pageWidth <= 0 {
 		return 0
 	}
-	leftRatio := line.BBox.X / pageWidth
-	switch {
-	case leftRatio < 0.08:
-		return 0
-	case leftRatio < 0.16:
-		return 1
-	case leftRatio < 0.24:
-		return 2
-	case leftRatio < 0.32:
-		return 3
-	case leftRatio < 0.40:
-		return 4
-	default:
-		return 5
+	fontSize := 12.0
+	for _, chunk := range line.Chunks {
+		if chunk != nil && chunk.FontStyle.FontSize > 0 {
+			fontSize = chunk.FontStyle.FontSize
+			break
+		}
 	}
+	step := math.Max(fontSize*1.5, pageWidth*0.08)
+	return int(math.Max(0, math.Floor(line.BBox.X/step)))
 }

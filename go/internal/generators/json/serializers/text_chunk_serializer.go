@@ -14,11 +14,7 @@
 
 package serializers
 
-import (
-	"fmt"
-
-	"github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
-)
+import "github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
 
 func SerializeTextChunk(c *entities.TextChunk) map[string]interface{} {
 	if c == nil {
@@ -26,16 +22,8 @@ func SerializeTextChunk(c *entities.TextChunk) map[string]interface{} {
 	}
 
 	out := essentialInfo(c, "text chunk")
-	out[jsonContent] = c.Text
-	if c.FontStyle.FontName != "" {
-		out[jsonFontType] = c.FontStyle.FontName
-	}
-	if size := serializeDouble(c.FontStyle.FontSize); size != nil {
-		out[jsonFontSize] = size
-	}
-	out[jsonTextColor] = fmt.Sprintf("%v", c.FontStyle.Color)
-	if c.IsHidden || c.IsHiddenOCG || c.IsOffPage || c.IsTiny {
-		out[jsonHiddenText] = true
+	for key, value := range textInfoFromChunkAndContent(c, c.Text, isHiddenChunk(c)) {
+		out[key] = value
 	}
 	return out
 }
@@ -46,37 +34,6 @@ func SerializeTextLine(line *entities.TextLine) map[string]interface{} {
 	}
 
 	out := essentialInfo(line, "text chunk")
-	out[jsonContent] = line.GetText()
-	if chunk := firstChunkFromLines([]*entities.TextLine{line}); chunk != nil {
-		if chunk.FontStyle.FontName != "" {
-			out[jsonFontType] = chunk.FontStyle.FontName
-		}
-		if size := serializeDouble(chunk.FontStyle.FontSize); size != nil {
-			out[jsonFontSize] = size
-		}
-		out[jsonTextColor] = fmt.Sprintf("%v", chunk.FontStyle.Color)
-	}
-	return out
-}
-
-func SerializeTextChunkContentElement(c *entities.TextChunk) map[string]interface{} {
-	if c == nil {
-		return nil
-	}
-
-	out := essentialInfo(c, "paragraph")
-	for key, value := range textInfoFromChunkAndContent(c, c.Text, c.IsHidden || c.IsHiddenOCG || c.IsOffPage || c.IsTiny) {
-		out[key] = value
-	}
-	return out
-}
-
-func SerializeTextLineContentElement(line *entities.TextLine) map[string]interface{} {
-	if line == nil {
-		return nil
-	}
-
-	out := essentialInfo(line, "paragraph")
 	for key, value := range textInfoFromLines([]*entities.TextLine{line}) {
 		out[key] = value
 	}

@@ -30,6 +30,15 @@ func SerializeBBox(bbox entities.BoundingBox) map[string]interface{} {
 	}
 }
 
+func SerializeBBoxArray(bbox entities.BoundingBox) []interface{} {
+	return []interface{}{
+		SerializeDouble(bbox.X),
+		SerializeDouble(bbox.Y),
+		SerializeDouble(bbox.X + bbox.Width),
+		SerializeDouble(bbox.Y + bbox.Height),
+	}
+}
+
 func SerializeDouble(v float64) interface{} {
 	if math.IsNaN(v) || math.IsInf(v, 0) {
 		return nil

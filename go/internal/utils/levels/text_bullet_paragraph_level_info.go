@@ -11,4 +11,6 @@ type TextBulletParagraphLevelInfo struct {
 	LevelInfo
 	IndentLevel int
 	BulletText  string
+	Label       string
+	LabelRegex  string
 }

@@ -306,14 +306,37 @@ func (g *MarkdownGenerator) renderTableCell(cell *entities.TableCell) string {
 		return Space
 	}
 
-	value := strings.TrimSpace(g.collectPlainText(cell.Content, true))
+	value, err := g.renderContents(cell.Content, true)
+	if err != nil {
+		return Space
+	}
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return Space
 	}
-	if g.withHTML && g.tableNeedsHTMLContent(cell.Content) {
-		return value
-	}
 	return value
+}
+
+func (g *MarkdownGenerator) renderContents(contents []entities.IObject, isTable bool) (string, error) {
+	var b strings.Builder
+	wroteAnyContent := false
+	for i, content := range contents {
+		if !g.isSupportedContent(content) {
+			continue
+		}
+		if err := g.write(&b, content); err != nil {
+			return "", err
+		}
+		isLastContent := i == len(contents)-1
+		if !isTable || !isLastContent {
+			g.writeContentsSeparator(&b)
+		}
+		wroteAnyContent = true
+	}
+	if !wroteAnyContent && isTable {
+		b.WriteString(Space)
+	}
+	return b.String(), nil
 }
 
 func (g *MarkdownGenerator) collectPlainText(contents []entities.IObject, forTable bool) string {
@@ -392,11 +415,7 @@ func (g *MarkdownGenerator) renderLines(lines []*entities.TextLine, keepLineBrea
 		}
 		return joined
 	}
-	separator := Space
-	if g.isInsideTable() {
-		separator = Space
-	}
-	return strings.Join(parts, separator)
+	return strings.Join(parts, Space)
 }
 
 func (g *MarkdownGenerator) renderTextLine(line *entities.TextLine) string {

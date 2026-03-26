@@ -4,7 +4,10 @@
 package processors
 
 import (
+	"math"
 	"sort"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/containers"
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
@@ -40,19 +43,41 @@ func (p *TableBorderProcessor) processNode(elements []entities.IObject, lineArts
 
 	used := make([]bool, len(elements))
 	result := make([]entities.IObject, 0, len(elements))
+	remainders := make([]entities.IObject, 0)
 
 	for _, table := range tables {
 		cellContents := make(map[[2]int][]entities.IObject)
 		for idx, element := range elements {
-			if !bboxContains(table.bbox, element.GetBBox()) {
+			if used[idx] || !bboxIntersects(table.bbox, element.GetBBox()) {
 				continue
 			}
-			used[idx] = true
-			row, col, ok := assignToCell(table, element.GetBBox())
-			if !ok {
-				continue
+
+			switch typed := element.(type) {
+			case *entities.TextChunk:
+				assigned, outside := splitTextChunkAcrossTable(table, typed)
+				if len(assigned) == 0 {
+					continue
+				}
+				used[idx] = true
+				for _, piece := range outside {
+					if piece != nil {
+						remainders = append(remainders, piece)
+					}
+				}
+				for cellKey, contents := range assigned {
+					cellContents[cellKey] = append(cellContents[cellKey], contents...)
+				}
+			default:
+				if !bboxContains(table.bbox, element.GetBBox()) {
+					continue
+				}
+				used[idx] = true
+				row, col, ok := assignToCell(table, element.GetBBox())
+				if !ok {
+					continue
+				}
+				cellContents[[2]int{row, col}] = append(cellContents[[2]int{row, col}], element)
 			}
-			cellContents[[2]int{row, col}] = append(cellContents[[2]int{row, col}], element)
 		}
 
 		innerLineArts := filterNestedLineArts(lineArts, table.bbox)
@@ -83,6 +108,7 @@ func (p *TableBorderProcessor) processNode(elements []entities.IObject, lineArts
 			result = append(result, element)
 		}
 	}
+	result = append(result, remainders...)
 
 	sort.SliceStable(result, func(i, j int) bool {
 		left := result[i].GetBBox()
@@ -385,4 +411,116 @@ func firstSemanticTable(contents []entities.IObject) (*entities.SemanticTable, b
 		}
 	}
 	return nil, false
+}
+
+func splitTextChunkAcrossTable(table detectedTable, chunk *entities.TextChunk) (map[[2]int][]entities.IObject, []*entities.TextChunk) {
+	assigned := make(map[[2]int][]entities.IObject)
+	pieces := make([]*entities.TextChunk, 0)
+	box := chunk.GetBBox()
+	if !bboxIntersects(table.bbox, box) {
+		return assigned, pieces
+	}
+
+	if before := sliceTextChunkByX(chunk, bboxLeft(box), bboxLeft(table.bbox)); before != nil {
+		pieces = append(pieces, before)
+	}
+	if after := sliceTextChunkByX(chunk, bboxRight(table.bbox), bboxRight(box)); after != nil {
+		pieces = append(pieces, after)
+	}
+
+	for row := 0; row < len(table.rowBounds)-1; row++ {
+		cellBottom := table.rowBounds[row+1]
+		cellTop := table.rowBounds[row]
+		if bboxTop(box) < cellBottom-tableAlignmentTolerance || bboxBottom(box) > cellTop+tableAlignmentTolerance {
+			continue
+		}
+		for col := 0; col < len(table.colBounds)-1; col++ {
+			cellLeft := table.colBounds[col]
+			cellRight := table.colBounds[col+1]
+			piece := sliceTextChunkByX(chunk, cellLeft, cellRight)
+			if piece == nil {
+				continue
+			}
+			assigned[[2]int{row, col}] = append(assigned[[2]int{row, col}], piece)
+		}
+	}
+
+	if len(assigned) == 0 && bboxContains(table.bbox, box) {
+		if row, col, ok := assignToCell(table, box); ok {
+			assigned[[2]int{row, col}] = append(assigned[[2]int{row, col}], chunk)
+		}
+	}
+	return assigned, pieces
+}
+
+func sliceTextChunkByX(chunk *entities.TextChunk, startX, endX float64) *entities.TextChunk {
+	box := chunk.GetBBox()
+	segmentLeft := math.Max(bboxLeft(box), startX)
+	segmentRight := math.Min(bboxRight(box), endX)
+	if segmentRight-segmentLeft <= tableAlignmentTolerance/10 {
+		return nil
+	}
+
+	runes := []rune(chunk.Text)
+	if len(runes) == 0 {
+		return nil
+	}
+
+	charWidth := box.Width / float64(len(runes))
+	if charWidth <= 0 {
+		return nil
+	}
+
+	startIdx := int(math.Floor((segmentLeft - bboxLeft(box)) / charWidth))
+	endIdx := int(math.Ceil((segmentRight - bboxLeft(box)) / charWidth))
+	if startIdx < 0 {
+		startIdx = 0
+	}
+	if endIdx > len(runes) {
+		endIdx = len(runes)
+	}
+	if startIdx >= endIdx {
+		return nil
+	}
+
+	text := string(runes[startIdx:endIdx])
+	leftTrim := len(text) - len(strings.TrimLeft(text, " \t\r\n"))
+	rightTrim := len(text) - len(strings.TrimRight(text, " \t\r\n"))
+	startIdx += utf8.RuneCountInString(text[:leftTrim])
+	endIdx -= utf8.RuneCountInString(text[len(text)-rightTrim:])
+	if startIdx >= endIdx {
+		return nil
+	}
+	text = string(runes[startIdx:endIdx])
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+
+	left := bboxLeft(box) + float64(startIdx)*charWidth
+	right := bboxLeft(box) + float64(endIdx)*charWidth
+	if right <= left {
+		return nil
+	}
+
+	return &entities.TextChunk{
+		BaseObject: entities.BaseObject{
+			ID: chunk.GetID(),
+			BBox: entities.BoundingBox{
+				X:      left,
+				Y:      box.Y,
+				Width:  right - left,
+				Height: box.Height,
+				Page:   box.Page,
+			},
+		},
+		Text:            text,
+		FontStyle:       chunk.FontStyle,
+		Baseline:        chunk.Baseline,
+		CharSpacing:     chunk.CharSpacing,
+		IsHidden:        chunk.IsHidden,
+		IsHiddenOCG:     chunk.IsHiddenOCG,
+		IsOffPage:       chunk.IsOffPage,
+		IsTiny:          chunk.IsTiny,
+		IsStrikethrough: chunk.IsStrikethrough,
+	}
 }

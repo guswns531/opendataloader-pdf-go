@@ -170,7 +170,21 @@ func (g *HtmlGenerator) writeList(b *strings.Builder, list *entities.PDFList) {
 	b.WriteString(HTMLLineBreak)
 	for _, item := range list.Items {
 		b.WriteString(HTMLListItemTag)
-		b.WriteString(g.renderCellContents(item.Content))
+		itemText := strings.TrimSpace(g.collectPlainText(item.Content))
+		if item.BulletText != "" && itemText == "" {
+			itemText = item.BulletText
+		}
+		if itemText != "" {
+			g.writeTextTag(b, HTMLParagraphTag, HTMLParagraphCloseTag, itemText, false)
+		}
+		for _, content := range item.Content {
+			switch content.(type) {
+			case *entities.SemanticHeading, *entities.SemanticParagraph, *entities.TextLine:
+				continue
+			default:
+				g.write(b, content)
+			}
+		}
 		b.WriteString(HTMLListItemCloseTag)
 		b.WriteString(HTMLLineBreak)
 	}
@@ -194,9 +208,9 @@ func (g *HtmlGenerator) writeImage(b *strings.Builder, image *entities.SemanticI
 		return
 	}
 	b.WriteString("<img src=\"")
-	b.WriteString(stdhtml.EscapeString(src))
+	b.WriteString(escapeAttribute(src))
 	b.WriteString("\" alt=\"")
-	b.WriteString(stdhtml.EscapeString(imageAlt(image)))
+	b.WriteString(escapeAttribute(imageAlt(image)))
 	b.WriteString("\">")
 	b.WriteString(HTMLLineBreak)
 }
@@ -204,7 +218,7 @@ func (g *HtmlGenerator) writeImage(b *strings.Builder, image *entities.SemanticI
 func (g *HtmlGenerator) writeFormula(b *strings.Builder, formula *entities.SemanticFormula) {
 	b.WriteString(HTMLMathDisplayTag)
 	b.WriteString("\\[")
-	b.WriteString(stdhtml.EscapeString(formula.LaTeX))
+	b.WriteString(sanitizeString(formula.LaTeX))
 	b.WriteString("\\]")
 	b.WriteString(HTMLMathDisplayCloseTag)
 	b.WriteString(HTMLLineBreak)
@@ -212,7 +226,7 @@ func (g *HtmlGenerator) writeFormula(b *strings.Builder, formula *entities.Seman
 
 func (g *HtmlGenerator) writeCaption(b *strings.Builder, caption *entities.SemanticCaption) {
 	b.WriteString(HTMLFigureCaptionTag)
-	b.WriteString(stdhtml.EscapeString(caption.Text))
+	b.WriteString(sanitizeString(caption.Text))
 	b.WriteString(HTMLFigureCaptionCloseTag)
 	b.WriteString(HTMLLineBreak)
 }
@@ -222,22 +236,22 @@ func (g *HtmlGenerator) renderCellContents(contents []entities.IObject) string {
 	for _, content := range contents {
 		switch v := content.(type) {
 		case *entities.SemanticHeading:
-			parts = append(parts, stdhtml.EscapeString(joinLines(v.Lines, false)))
+			parts = append(parts, sanitizeString(joinLines(v.Lines, false)))
 		case *entities.SemanticParagraph:
 			parts = append(parts, escapeWithBreaks(joinLines(v.Lines, g.config.KeepLineBreaks)))
 		case *entities.TextLine:
-			parts = append(parts, stdhtml.EscapeString(v.GetText()))
+			parts = append(parts, sanitizeString(v.GetText()))
 		case *entities.SemanticCaption:
-			parts = append(parts, stdhtml.EscapeString(v.Text))
+			parts = append(parts, sanitizeString(v.Text))
 		case *entities.SemanticFormula:
-			parts = append(parts, stdhtml.EscapeString(v.LaTeX))
+			parts = append(parts, sanitizeString(v.LaTeX))
 		case *entities.SemanticImage:
 			src := v.ExternalPath
 			if g.config.ImageOutput == api.ImageOutputEmbedded && len(v.Data) > 0 {
 				src = utils.EncodeImageBase64(v.Data, g.config.ImageFormat)
 			}
 			if src != "" {
-				parts = append(parts, "<img src=\""+stdhtml.EscapeString(src)+"\" alt=\""+stdhtml.EscapeString(imageAlt(v))+"\">")
+				parts = append(parts, "<img src=\""+escapeAttribute(src)+"\" alt=\""+escapeAttribute(imageAlt(v))+"\">")
 			}
 		}
 	}
@@ -252,10 +266,48 @@ func (g *HtmlGenerator) writeTextTag(b *strings.Builder, openTag, closeTag, valu
 	if preserveBreaks {
 		b.WriteString(escapeWithBreaks(value))
 	} else {
-		b.WriteString(stdhtml.EscapeString(value))
+		b.WriteString(sanitizeString(value))
 	}
 	b.WriteString(closeTag)
 	b.WriteString(HTMLLineBreak)
+}
+
+func (g *HtmlGenerator) collectPlainText(contents []entities.IObject) string {
+	var parts []string
+	for _, content := range contents {
+		switch v := content.(type) {
+		case *entities.SemanticHeading:
+			parts = append(parts, joinLines(v.Lines, false))
+		case *entities.SemanticParagraph:
+			parts = append(parts, joinLines(v.Lines, false))
+		case *entities.TextLine:
+			parts = append(parts, v.GetText())
+		case *entities.SemanticCaption:
+			parts = append(parts, v.Text)
+		case *entities.SemanticFormula:
+			parts = append(parts, v.LaTeX)
+		case *entities.PDFList:
+			for _, item := range v.Items {
+				parts = append(parts, g.collectPlainText(item.Content))
+			}
+		case *entities.SemanticTable:
+			for _, row := range v.Rows {
+				for _, cell := range row.Cells {
+					if cell == nil {
+						continue
+					}
+					parts = append(parts, g.collectPlainText(cell.Content))
+				}
+			}
+		case *entities.SemanticHeaderFooter:
+			if g.config.IncludeHeaderFooter {
+				for _, line := range v.Lines {
+					parts = append(parts, line.GetText())
+				}
+			}
+		}
+	}
+	return strings.Join(filterEmpty(parts), " ")
 }
 
 func joinLines(lines []*entities.TextLine, keepLineBreaks bool) string {
@@ -277,7 +329,7 @@ func joinLines(lines []*entities.TextLine, keepLineBreaks bool) string {
 }
 
 func escapeWithBreaks(value string) string {
-	return strings.ReplaceAll(stdhtml.EscapeString(value), "\n", HTMLLineBreakTag)
+	return strings.ReplaceAll(sanitizeString(value), "\n", HTMLLineBreakTag)
 }
 
 func imageAlt(image *entities.SemanticImage) string {
@@ -285,6 +337,17 @@ func imageAlt(image *entities.SemanticImage) string {
 		return image.Alt
 	}
 	return "image"
+}
+
+func sanitizeString(value string) string {
+	return stdhtml.EscapeString(strings.ReplaceAll(value, "\u0000", ""))
+}
+
+func escapeAttribute(value string) string {
+	value = strings.ReplaceAll(value, "\u0000", "")
+	value = strings.ReplaceAll(value, "\n", " ")
+	value = strings.ReplaceAll(value, "\r", "")
+	return stdhtml.EscapeString(value)
 }
 
 func filterEmpty(values []string) []string {

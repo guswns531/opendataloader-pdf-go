@@ -4,6 +4,7 @@
 package processors
 
 import (
+	"math"
 	"sort"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/containers"
@@ -11,9 +12,8 @@ import (
 )
 
 const (
-	clusterRowTolerance = 6.0
-	clusterGapTolerance = 24.0
-	clusterMinPoints    = 2
+	clusterAlignmentFloor = 3.0
+	clusterMinPoints      = 2
 )
 
 type ClusterTableProcessor struct {
@@ -103,22 +103,20 @@ func dbscanTextClusters(chunks []*entities.TextChunk) [][]*entities.TextChunk {
 func clusterNeighbors(chunks []*entities.TextChunk, index int) []int {
 	neighbors := make([]int, 0)
 	source := chunks[index]
-	epsilon := source.GetBBox().Height * 0.5
-	if epsilon <= 0 {
-		epsilon = clusterRowTolerance
-	}
+	sourceEpsilon := clusterEpsilon(source)
+	sourceCenterX := bboxCenterX(source.GetBBox())
+	sourceCenterY := bboxCenterY(source.GetBBox())
 	for idx, chunk := range chunks {
 		if idx == index || source.GetBBox().Page != chunk.GetBBox().Page {
 			continue
 		}
-		rowTolerance := max(clusterRowTolerance, epsilon)
-		sameRow := areClose(source.Baseline, chunk.Baseline, rowTolerance)
-		sameColumn := areClose(source.GetBBox().X, chunk.GetBBox().X, clusterGapTolerance)
-		horizontalGap := chunk.GetBBox().X - bboxRight(source.GetBBox())
-		closeHorizontalNeighbor := source.GetBBox().X <= chunk.GetBBox().X &&
-			horizontalGap <= clusterGapTolerance &&
-			areClose(source.GetBBox().Y, chunk.GetBBox().Y, rowTolerance)
-		if sameRow || sameColumn || closeHorizontalNeighbor {
+		targetEpsilon := clusterEpsilon(chunk)
+		epsilon := math.Max(sourceEpsilon, targetEpsilon)
+		sameRow := areClose(source.Baseline, chunk.Baseline, epsilon)
+		sameColumn := areClose(sourceCenterX, bboxCenterX(chunk.GetBBox()), epsilon)
+		pointDistance := math.Hypot(sourceCenterX-bboxCenterX(chunk.GetBBox()), sourceCenterY-bboxCenterY(chunk.GetBBox()))
+		touchingBoxes := bboxIntersects(expandBBox(source.GetBBox(), epsilon), expandBBox(chunk.GetBBox(), epsilon))
+		if sameRow || sameColumn || pointDistance <= epsilon || touchingBoxes {
 			neighbors = append(neighbors, idx)
 		}
 	}
@@ -136,7 +134,7 @@ func containsChunk(cluster []*entities.TextChunk, chunk *entities.TextChunk) boo
 
 func clusterToTable(cluster []*entities.TextChunk, ctx *containers.ProcessorContext) *entities.SemanticTable {
 	sort.SliceStable(cluster, func(i, j int) bool {
-		if !areClose(cluster[i].Baseline, cluster[j].Baseline, clusterRowTolerance) {
+		if !areClose(cluster[i].Baseline, cluster[j].Baseline, clusterAlignmentFloor) {
 			return cluster[i].Baseline > cluster[j].Baseline
 		}
 		return cluster[i].GetBBox().X < cluster[j].GetBBox().X
@@ -144,7 +142,8 @@ func clusterToTable(cluster []*entities.TextChunk, ctx *containers.ProcessorCont
 
 	rowGroups := make([][]*entities.TextChunk, 0)
 	for _, chunk := range cluster {
-		if len(rowGroups) == 0 || !areClose(rowGroups[len(rowGroups)-1][0].Baseline, chunk.Baseline, clusterRowTolerance) {
+		tolerance := math.Max(clusterAlignmentFloor, clusterEpsilon(chunk))
+		if len(rowGroups) == 0 || !areClose(rowGroups[len(rowGroups)-1][0].Baseline, chunk.Baseline, tolerance) {
 			rowGroups = append(rowGroups, []*entities.TextChunk{chunk})
 			continue
 		}
@@ -193,4 +192,21 @@ func clusterToTable(cluster []*entities.TextChunk, ctx *containers.ProcessorCont
 	}
 
 	return buildTableFromGrid(rowBounds, colBounds, cells, page, ctx)
+}
+
+func clusterEpsilon(chunk *entities.TextChunk) float64 {
+	if chunk == nil || chunk.GetBBox().Height <= 0 {
+		return clusterAlignmentFloor
+	}
+	return math.Max(clusterAlignmentFloor, chunk.GetBBox().Height*0.5)
+}
+
+func expandBBox(box entities.BoundingBox, padding float64) entities.BoundingBox {
+	return entities.BoundingBox{
+		X:      box.X - padding,
+		Y:      box.Y - padding,
+		Width:  box.Width + padding*2,
+		Height: box.Height + padding*2,
+		Page:   box.Page,
+	}
 }

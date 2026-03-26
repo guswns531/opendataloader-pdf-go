@@ -33,12 +33,11 @@ type ExtractedImage struct {
 }
 
 func ExtractImages(doc *model.PDDocument, pageIdx int, outputDir string) ([]*ExtractedImage, error) {
-	page, err := doc.GetPage(pageIdx)
-	if err != nil {
+	if _, err := doc.GetPage(pageIdx); err != nil {
 		return nil, err
 	}
 
-	imagesByObj, err := pdfcpu.ExtractPageImages(doc.Context, page.Number, false)
+	imagesByObj, err := pdfcpu.ExtractPageImages(doc.Context, pageIdx+1, false)
 	if err != nil {
 		if isUnsupportedImageMaskError(err) {
 			return []*ExtractedImage{}, nil
@@ -80,7 +79,7 @@ func ExtractImages(doc *model.PDDocument, pageIdx int, outputDir string) ([]*Ext
 			if ext == "" {
 				ext = "bin"
 			}
-			outPath := filepath.Join(outputDir, fmt.Sprintf("page_%03d_image_%s_%d.%s", page.Number, sanitizeResourceName(img.Name), objNr, ext))
+			outPath := filepath.Join(outputDir, fmt.Sprintf("page_%03d_image_%s_%d.%s", pageIdx+1, sanitizeResourceName(img.Name), objNr, ext))
 			if err := os.WriteFile(outPath, data, 0o644); err != nil {
 				return nil, err
 			}

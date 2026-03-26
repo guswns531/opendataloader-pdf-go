@@ -108,7 +108,7 @@ func (d *PDDocument) GetPage(pageIdx int) (*PDPage, error) {
 
 	dim := d.pageDims[pageIdx]
 	return &PDPage{
-		Number: pageIdx + 1,
+		Number: pageIdx,
 		Width:  dim.Width,
 		Height: dim.Height,
 		Rotate: attrs.Rotate,

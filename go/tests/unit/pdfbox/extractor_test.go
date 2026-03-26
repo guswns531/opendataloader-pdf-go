@@ -80,6 +80,17 @@ func TestPageCount(t *testing.T) {
 	assert.Greater(t, doc.PageCount(), 0)
 }
 
+func TestGetPageUsesZeroBasedNumber(t *testing.T) {
+	pdf := writeLineArtPDF(t)
+	doc, err := model.Open(pdf, "")
+	require.NoError(t, err)
+	defer doc.Close()
+
+	page, err := doc.GetPage(0)
+	require.NoError(t, err)
+	assert.Equal(t, 0, page.Number)
+}
+
 func writeLineArtPDF(t *testing.T) string {
 	t.Helper()
 

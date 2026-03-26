@@ -90,7 +90,7 @@ func ExtractLineArts(doc *model.PDDocument, pageIdx int) ([]*ExtractedLineArt, e
 			}
 		}
 		for _, rect := range rects {
-			if rect.w > rect.h && rect.w > 5.0 {
+			if math.Abs(rect.h) < 2.0 && rect.w > 5.0 {
 				out = append(out, &ExtractedLineArt{
 					X:            rect.x,
 					Y:            rect.y,
@@ -100,7 +100,7 @@ func ExtractLineArts(doc *model.PDDocument, pageIdx int) ([]*ExtractedLineArt, e
 					LineWidth:    gs.lineWidth,
 					Page:         pageIdx,
 				})
-			} else if rect.h > rect.w && rect.h > 5.0 {
+			} else if math.Abs(rect.w) < 2.0 && rect.h > 5.0 {
 				out = append(out, &ExtractedLineArt{
 					X:          rect.x,
 					Y:          rect.y,
@@ -155,17 +155,19 @@ func ExtractLineArts(doc *model.PDDocument, pageIdx int) ([]*ExtractedLineArt, e
 		case "re":
 			if values, ok := parseFloats(operands); ok && len(values) == 4 {
 				x0, y0 := gs.ctm.transform(values[0], values[1])
-				x1, y1 := gs.ctm.transform(values[0]+values[2], values[1]+values[3])
+				x1, y1 := gs.ctm.transform(values[0]+values[2], values[1])
+				x2, y2 := gs.ctm.transform(values[0], values[1]+values[3])
+				x3, y3 := gs.ctm.transform(values[0]+values[2], values[1]+values[3])
 				rects = append(rects, rectPath{
-					x: math.Min(x0, x1),
-					y: math.Min(y0, y1),
-					w: math.Abs(x1 - x0),
-					h: math.Abs(y1 - y0),
+					x: math.Min(math.Min(x0, x1), math.Min(x2, x3)),
+					y: math.Min(math.Min(y0, y1), math.Min(y2, y3)),
+					w: math.Max(math.Max(x0, x1), math.Max(x2, x3)) - math.Min(math.Min(x0, x1), math.Min(x2, x3)),
+					h: math.Max(math.Max(y0, y1), math.Max(y2, y3)) - math.Min(math.Min(y0, y1), math.Min(y2, y3)),
 				})
 			}
-		case "S", "s":
+		case "S", "s", "B", "B*", "b", "b*":
 			flushPath()
-		case "n", "f", "F", "f*", "B", "B*", "b", "b*":
+		case "n", "f", "F", "f*":
 			path = nil
 			rects = nil
 			haveCurrent = false

@@ -8,6 +8,7 @@
 package processors
 
 import (
+	"math"
 	"strings"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/containers"
@@ -24,9 +25,6 @@ type HeadingProcessor struct{}
 
 func (p *HeadingProcessor) Process(lines []*entities.TextLine, ctx *containers.ProcessorContext) []*entities.SemanticHeading {
 	stats := utils.NewTextNodeStatistics()
-	bodyFontSize := 0.0
-	fontCounts := map[float64]int{}
-
 	for _, line := range lines {
 		if line == nil {
 			continue
@@ -34,20 +32,22 @@ func (p *HeadingProcessor) Process(lines []*entities.TextLine, ctx *containers.P
 		size := lineFontSize(line)
 		weight := lineFontWeight(line)
 		stats.Add(size, weight)
-		if size > 0 {
-			fontCounts[size]++
-			if fontCounts[size] > fontCounts[bodyFontSize] {
-				bodyFontSize = size
-			}
-		}
 	}
+	bodyFontSize := stats.FontSizeMode()
 
 	headings := make([]*entities.SemanticHeading, 0)
-	for _, line := range lines {
+	for idx, line := range lines {
 		if line == nil {
 			continue
 		}
-		score := p.headingScore(line, bodyFontSize, stats)
+		var prevLine, nextLine *entities.TextLine
+		if idx > 0 {
+			prevLine = lines[idx-1]
+		}
+		if idx+1 < len(lines) {
+			nextLine = lines[idx+1]
+		}
+		score := p.headingScore(line, prevLine, nextLine, bodyFontSize, stats)
 		if score <= headingProbabilityThreshold {
 			continue
 		}
@@ -65,7 +65,7 @@ func (p *HeadingProcessor) Process(lines []*entities.TextLine, ctx *containers.P
 	return headings
 }
 
-func (p *HeadingProcessor) headingScore(line *entities.TextLine, bodyFontSize float64, stats *utils.TextNodeStatistics) float64 {
+func (p *HeadingProcessor) headingScore(line, prevLine, nextLine *entities.TextLine, bodyFontSize float64, stats *utils.TextNodeStatistics) float64 {
 	text := strings.TrimSpace(line.GetText())
 	if text == "" {
 		return 0
@@ -90,6 +90,12 @@ func (p *HeadingProcessor) headingScore(line *entities.TextLine, bodyFontSize fl
 	if lineIsBold(line) {
 		score += 0.2
 	}
+	if isIsolatedHeadingLine(line, prevLine, nextLine) {
+		score += 0.22
+	}
+	if line.BBox.Page == 0 && line.BBox.Y+line.BBox.Height >= 700 {
+		score += 0.08
+	}
 	length := len([]rune(text))
 	switch {
 	case length <= 8:
@@ -112,6 +118,26 @@ func (p *HeadingProcessor) headingScore(line *entities.TextLine, bodyFontSize fl
 		score -= 0.1
 	}
 	return score
+}
+
+func isIsolatedHeadingLine(line, prevLine, nextLine *entities.TextLine) bool {
+	if line == nil {
+		return false
+	}
+	threshold := math.Max(line.BBox.Height*0.6, 8)
+	prevGapOK := prevLine == nil || prevLine.BBox.Y-line.BBox.Y >= threshold || !sameColumn(prevLine, line)
+	nextGapOK := nextLine == nil || line.BBox.Y-nextLine.BBox.Y >= threshold || !sameColumn(nextLine, line)
+	return prevGapOK && nextGapOK
+}
+
+func sameColumn(a, b *entities.TextLine) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	centerA := a.BBox.X + a.BBox.Width/2
+	centerB := b.BBox.X + b.BBox.Width/2
+	halfWidth := math.Max(math.Min(a.BBox.Width, b.BBox.Width)/2, 10)
+	return math.Abs(centerA-centerB) <= halfWidth
 }
 
 func nextID(ctx *containers.ProcessorContext) string {
