@@ -20,7 +20,7 @@ import (
 func findSamplePDF(t *testing.T) string {
 	t.Helper()
 
-	root := filepath.Clean("../../../samples")
+	root := filepath.Join("..", "..", "..", "samples")
 	var found string
 	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d == nil || d.IsDir() {
@@ -94,7 +94,7 @@ func TestGetPageUsesZeroBasedNumber(t *testing.T) {
 }
 
 func TestExtractTextChunksAvoidFalseOverlapForSurveyIEEEFixture(t *testing.T) {
-	pdf := filepath.Clean("../../../samples/pdf/1901.03003.pdf")
+	pdf := filepath.Join("..", "..", "..", "samples", "pdf", "1901.03003.pdf")
 	if _, err := os.Stat(pdf); err != nil {
 		t.Skip("fixture not available")
 	}

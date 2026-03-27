@@ -80,6 +80,24 @@ func TestTextLineProcessorInsertsSpaceForSmallPositiveWordBoundaryGap(t *testing
 	assert.Equal(t, "In Proceedings", lines[0].GetText())
 }
 
+func TestTextLineProcessorRestoresBenchmarkDenseWordJoins(t *testing.T) {
+	processor := &processors.TextLineProcessor{}
+	ctx := containers.NewProcessorContext()
+	chunks := []*entities.TextChunk{
+		newTextChunk("Growth", 10.0, 100, 30.0, 10, 12, 100),
+		newTextChunk("and", 40.4, 100, 16.0, 10, 12, 100),
+		newTextChunk("the", 56.8, 100, 15.0, 10, 12, 100),
+		newTextChunk("Creation", 72.2, 100, 39.0, 10, 12, 100),
+		newTextChunk("of", 111.6, 100, 8.0, 10, 12, 100),
+		newTextChunk("Life", 120.0, 100, 16.0, 10, 12, 100),
+	}
+
+	lines := processor.Process(chunks, nil, ctx)
+
+	assert.Len(t, lines, 1)
+	assert.Equal(t, "Growth and the Creation of Life", lines[0].GetText())
+}
+
 func TestTextLineProcessorSuppressesIntrawordSpaceAfterSingleLowercaseFragment(t *testing.T) {
 	processor := &processors.TextLineProcessor{}
 	ctx := containers.NewProcessorContext()

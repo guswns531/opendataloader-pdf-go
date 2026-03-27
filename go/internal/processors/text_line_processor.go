@@ -18,7 +18,7 @@ const (
 	textLineBaselineTolerance = 0.5
 	textLineSpaceRatio        = 0.3
 	textLineTabRatio          = 2.0
-	textLineWordBoundaryRatio = 0.12
+	textLineWordBoundaryRatio = 0.05
 	listLabelHeightEpsilon    = 1.5
 	lineArtBulletGapMax       = 20.0
 	lineArtBaselineTolerance  = 5.0

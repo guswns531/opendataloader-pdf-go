@@ -11,6 +11,11 @@ import (
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/generators/markdown"
 )
 
+func repoPath(parts ...string) string {
+	all := append([]string{"..", ".."}, parts...)
+	return filepath.Join(all...)
+}
+
 func TestParsePageRangePreservesOrderAndDuplicates(t *testing.T) {
 	got, explicit, err := parsePageRange("3,1,5-7,6", 10)
 	if err != nil {
@@ -87,7 +92,7 @@ func TestResolveImageDirDefaultsToOutputFolder(t *testing.T) {
 }
 
 func TestProcessJavaDocumentPreservesBibliographyBoundarySpaceInFixture(t *testing.T) {
-	pdf := filepath.Clean("../../../samples/pdf/1901.03003.pdf")
+	pdf := repoPath("samples", "pdf", "1901.03003.pdf")
 	if _, err := os.Stat(pdf); err != nil {
 		t.Skip("fixture not available")
 	}
@@ -121,7 +126,7 @@ func TestProcessJavaDocumentPreservesBibliographyBoundarySpaceInFixture(t *testi
 }
 
 func TestProcessJavaDocumentSuppressesIntrawordSyntheticSpacesInFixture(t *testing.T) {
-	pdf := filepath.Clean("../../../samples/pdf/1901.03003.pdf")
+	pdf := repoPath("samples", "pdf", "1901.03003.pdf")
 	if _, err := os.Stat(pdf); err != nil {
 		t.Skip("fixture not available")
 	}
