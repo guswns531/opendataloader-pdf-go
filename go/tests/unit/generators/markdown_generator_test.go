@@ -72,6 +72,125 @@ func TestMarkdownGeneratorTable(t *testing.T) {
 	assert.Contains(t, got, "| a | b |")
 }
 
+func TestMarkdownGeneratorTableTextChunks(t *testing.T) {
+	doc := &entities.Document{
+		Pages: []*entities.Page{
+			{
+				Elements: []entities.IObject{
+					&entities.SemanticTable{
+						Rows: []*entities.TableRow{
+							{Cells: []*entities.TableCell{
+								{Content: []entities.IObject{&entities.TextChunk{Text: "No."}}},
+								{Content: []entities.IObject{&entities.TextChunk{Text: "Name"}}},
+								{Content: []entities.IObject{&entities.TextChunk{Text: "Count"}}},
+							}},
+							{Cells: []*entities.TableCell{
+								{Content: []entities.IObject{&entities.TextChunk{Text: "1"}}},
+								{Content: []entities.IObject{&entities.TextChunk{Text: "Union of Youth Federations"}}},
+								{Content: []entities.IObject{&entities.TextChunk{Text: "17,266"}}},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := markdown.NewMarkdownGenerator(api.DefaultConfig(), false, false).Generate(doc)
+
+	assert.NoError(t, err)
+	assert.Contains(t, got, "| No. | Name | Count |")
+	assert.Contains(t, got, "| --- | --- | --- |")
+	assert.Contains(t, got, "| 1 | Union of Youth Federations | 17,266 |")
+}
+
+func TestMarkdownGeneratorEscapesPipeCharactersInTableCells(t *testing.T) {
+	doc := &entities.Document{
+		Pages: []*entities.Page{
+			{
+				Elements: []entities.IObject{
+					&entities.SemanticTable{
+						Rows: []*entities.TableRow{
+							{Cells: []*entities.TableCell{
+								{Content: []entities.IObject{&entities.TextChunk{Text: "A|B"}}},
+								{Content: []entities.IObject{&entities.TextChunk{Text: "Value"}}},
+							}},
+							{Cells: []*entities.TableCell{
+								{Content: []entities.IObject{&entities.TextChunk{Text: "1|2"}}},
+								{Content: []entities.IObject{&entities.TextChunk{Text: "3"}}},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := markdown.NewMarkdownGenerator(api.DefaultConfig(), false, false).Generate(doc)
+
+	assert.NoError(t, err)
+	assert.Contains(t, got, "| A\\|B | Value |")
+	assert.Contains(t, got, "| 1\\|2 | 3 |")
+}
+
+func TestMarkdownGeneratorUsesHTMLForMergedCells(t *testing.T) {
+	doc := &entities.Document{
+		Pages: []*entities.Page{
+			{
+				Elements: []entities.IObject{
+					&entities.SemanticTable{
+						Rows: []*entities.TableRow{
+							{Cells: []*entities.TableCell{
+								{Content: []entities.IObject{&entities.TextChunk{Text: "Header"}}, Colspan: 2},
+							}},
+							{Cells: []*entities.TableCell{
+								{Content: []entities.IObject{&entities.TextChunk{Text: "A"}}},
+								{Content: []entities.IObject{&entities.TextChunk{Text: "B"}}},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := markdown.NewMarkdownGenerator(api.DefaultConfig(), true, false).Generate(doc)
+
+	assert.NoError(t, err)
+	assert.Contains(t, got, "<table>")
+	assert.Contains(t, got, "<th colspan=\"2\">Header</th>")
+	assert.NotContains(t, got, "| --- |")
+}
+
+func TestMarkdownGeneratorUsesHTMLForNestedTables(t *testing.T) {
+	nested := &entities.SemanticTable{
+		Rows: []*entities.TableRow{
+			{Cells: []*entities.TableCell{{Content: []entities.IObject{&entities.TextChunk{Text: "inner"}}}}},
+		},
+	}
+	doc := &entities.Document{
+		Pages: []*entities.Page{
+			{
+				Elements: []entities.IObject{
+					&entities.SemanticTable{
+						Rows: []*entities.TableRow{
+							{Cells: []*entities.TableCell{
+								{Content: []entities.IObject{nested}},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := markdown.NewMarkdownGenerator(api.DefaultConfig(), true, false).Generate(doc)
+
+	assert.NoError(t, err)
+	assert.Contains(t, got, "<table>")
+	assert.NotContains(t, got, "| --- |")
+}
+
 func TestMarkdownGeneratorPageSeparator(t *testing.T) {
 	cfg := api.DefaultConfig()
 	cfg.MarkdownPageSeparator = "--- page %page-number% ---"

@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	orderedBulletPattern   = regexp.MustCompile(`^(\d+\.|\([a-zA-Z0-9]+\)|[a-zA-Z]\.)`)
+	orderedBulletPattern   = regexp.MustCompile(`^(\d+(?:\.\d+)*\.|\([a-zA-Z0-9]+\)|[a-zA-Z]\.)`)
 	unorderedBulletPattern = regexp.MustCompile(`^[•\-※◦▪▸►\*]`)
 	koreanAttachPattern    = regexp.MustCompile(`^붙\s*임`)
 )
@@ -94,6 +94,7 @@ func (p *ListProcessor) consumeListItem(elements []entities.IObject, start int, 
 	line := elements[start].(*entities.TextLine)
 	bulletText, bodyText := splitBulletText(strings.TrimSpace(line.GetText()))
 	bodyLine := cloneLineWithText(line, bodyText)
+	bodyLine.InListItem = true
 	content := []entities.IObject{bodyLine}
 	box := bodyLine.BBox
 	next := start + 1
@@ -105,6 +106,7 @@ func (p *ListProcessor) consumeListItem(elements []entities.IObject, start int, 
 			if isBulletLine(nextLine) || !isListContinuation(line, previousLine, nextLine) {
 				break
 			}
+			nextLine.InListItem = true
 			content = append(content, nextLine)
 			box = unionBox(box, nextLine.BBox)
 			previousLine = nextLine

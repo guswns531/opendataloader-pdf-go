@@ -134,7 +134,7 @@ func (g *MarkdownGenerator) writeParagraph(b *strings.Builder, paragraph *entiti
 }
 
 func (g *MarkdownGenerator) writeTable(b *strings.Builder, table *entities.SemanticTable) error {
-	if g.withHTML && g.tableNeedsHTML(table) {
+	if g.tableNeedsHTML(table) {
 		return g.writeHTMLTable(b, table)
 	}
 
@@ -147,7 +147,9 @@ func (g *MarkdownGenerator) writeTable(b *strings.Builder, table *entities.Seman
 		for colIndex := 0; colIndex < columnCount; colIndex++ {
 			b.WriteString(Space)
 			if colIndex < len(row.Cells) && row.Cells[colIndex] != nil {
-				b.WriteString(g.renderTableCell(row.Cells[colIndex]))
+				cellText := g.renderTableCell(row.Cells[colIndex])
+				cellText = strings.ReplaceAll(cellText, TableColumnSeparator, `\|`)
+				b.WriteString(cellText)
 			}
 			b.WriteString(Space)
 			b.WriteString(TableColumnSeparator)
@@ -172,7 +174,10 @@ func (g *MarkdownGenerator) writeList(b *strings.Builder, list *entities.PDFList
 		if !g.isInsideTable() {
 			prefix := ListItem
 			if item.IsOrdered || list.IsOrdered {
-				prefix = fmt.Sprintf("%d.", idx+1)
+				prefix = strings.TrimSpace(item.BulletText)
+				if prefix == "" {
+					prefix = fmt.Sprintf("%d.", idx+1)
+				}
 			}
 			b.WriteString(strings.Repeat(Indent, max(item.Level, 0)))
 			b.WriteString(prefix)
@@ -265,38 +270,24 @@ func (g *MarkdownGenerator) writeHTMLTable(b *strings.Builder, table *entities.S
 
 	b.WriteString(HTMLTableTag)
 	b.WriteString(LineBreak)
-	for rowIndex, row := range table.Rows {
+	if len(table.Rows) > 0 {
 		b.WriteString(Indent)
-		b.WriteString(HTMLTableRowTag)
+		b.WriteString(HTMLTableHeadTag)
 		b.WriteString(LineBreak)
-		for colIndex, cell := range row.Cells {
-			if cell == nil {
-				continue
-			}
-			if !cell.IsOrigin(rowIndex, colIndex) {
-				continue
-			}
-			tag := "td"
-			if rowIndex == 0 {
-				tag = "th"
-			}
-			b.WriteString(Indent)
-			b.WriteString(Indent)
-			b.WriteString("<")
-			b.WriteString(tag)
-			if cell.EffectiveColSpan() > 1 {
-				b.WriteString(fmt.Sprintf(" colspan=\"%d\"", cell.EffectiveColSpan()))
-			}
-			if cell.EffectiveRowSpan() > 1 {
-				b.WriteString(fmt.Sprintf(" rowspan=\"%d\"", cell.EffectiveRowSpan()))
-			}
-			b.WriteString(">")
-			b.WriteString(g.renderTableCell(cell))
-			b.WriteString(fmt.Sprintf("</%s>", tag))
-			b.WriteString(LineBreak)
+		g.writeHTMLTableRow(b, table.Rows[0], 0, true)
+		b.WriteString(Indent)
+		b.WriteString(HTMLTableHeadCloseTag)
+		b.WriteString(LineBreak)
+	}
+	if len(table.Rows) > 1 {
+		b.WriteString(Indent)
+		b.WriteString(HTMLTableBodyTag)
+		b.WriteString(LineBreak)
+		for rowIndex := 1; rowIndex < len(table.Rows); rowIndex++ {
+			g.writeHTMLTableRow(b, table.Rows[rowIndex], rowIndex, false)
 		}
 		b.WriteString(Indent)
-		b.WriteString(HTMLTableRowCloseTag)
+		b.WriteString(HTMLTableBodyCloseTag)
 		b.WriteString(LineBreak)
 	}
 	b.WriteString(HTMLTableCloseTag)
@@ -304,18 +295,61 @@ func (g *MarkdownGenerator) writeHTMLTable(b *strings.Builder, table *entities.S
 	return nil
 }
 
+func (g *MarkdownGenerator) writeHTMLTableRow(b *strings.Builder, row *entities.TableRow, rowIndex int, isHeader bool) {
+	if row == nil {
+		return
+	}
+
+	b.WriteString(Indent)
+	b.WriteString(Indent)
+	b.WriteString(HTMLTableRowTag)
+	b.WriteString(LineBreak)
+	for colIndex, cell := range row.Cells {
+		if cell == nil || !cell.IsOrigin(rowIndex, colIndex) {
+			continue
+		}
+		tag := "td"
+		if isHeader {
+			tag = "th"
+		}
+		b.WriteString(Indent)
+		b.WriteString(Indent)
+		b.WriteString(Indent)
+		b.WriteString("<")
+		b.WriteString(tag)
+		if cell.EffectiveColSpan() > 1 {
+			b.WriteString(fmt.Sprintf(" colspan=\"%d\"", cell.EffectiveColSpan()))
+		}
+		if cell.EffectiveRowSpan() > 1 {
+			b.WriteString(fmt.Sprintf(" rowspan=\"%d\"", cell.EffectiveRowSpan()))
+		}
+		b.WriteString(">")
+		b.WriteString(g.renderTableCell(cell))
+		b.WriteString(fmt.Sprintf("</%s>", tag))
+		b.WriteString(LineBreak)
+	}
+	b.WriteString(Indent)
+	b.WriteString(Indent)
+	b.WriteString(HTMLTableRowCloseTag)
+	b.WriteString(LineBreak)
+}
+
 func (g *MarkdownGenerator) renderTableCell(cell *entities.TableCell) string {
 	if cell == nil {
 		return Space
 	}
 
-	value, err := g.renderContents(cell.Content, true)
-	if err != nil {
-		return Space
-	}
+	value := g.collectPlainText(cell.Content, true)
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return Space
+		fallback, err := g.renderContents(cell.Content, true)
+		if err != nil {
+			return Space
+		}
+		value = strings.TrimSpace(fallback)
+		if value == "" {
+			return Space
+		}
 	}
 	return value
 }
@@ -349,6 +383,8 @@ func (g *MarkdownGenerator) collectPlainText(contents []entities.IObject, forTab
 			continue
 		}
 		switch v := content.(type) {
+		case *entities.TextChunk:
+			parts = append(parts, v.Text)
 		case *entities.SemanticHeading:
 			parts = append(parts, g.renderLines(v.Lines, false))
 		case *entities.SemanticParagraph:
@@ -443,7 +479,7 @@ func (g *MarkdownGenerator) isSupportedContent(content entities.IObject) bool {
 	switch content.(type) {
 	case *entities.SemanticHeaderFooter:
 		return g.config.IncludeHeaderFooter
-	case *entities.SemanticHeading, *entities.SemanticParagraph, *entities.TextLine,
+	case *entities.SemanticHeading, *entities.SemanticParagraph, *entities.TextLine, *entities.TextChunk,
 		*entities.SemanticFormula, *entities.SemanticImage, *entities.SemanticTable,
 		*entities.PDFList, *entities.SemanticCaption:
 		return true
@@ -470,6 +506,9 @@ func (g *MarkdownGenerator) tableNeedsHTML(table *entities.SemanticTable) bool {
 	for _, row := range table.Rows {
 		for _, cell := range row.Cells {
 			if cell != nil && (cell.EffectiveColSpan() > 1 || cell.EffectiveRowSpan() > 1) {
+				return true
+			}
+			if cell != nil && g.tableNeedsHTMLContent(cell.Content) {
 				return true
 			}
 		}

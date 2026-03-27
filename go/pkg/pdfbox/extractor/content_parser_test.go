@@ -51,6 +51,20 @@ endbfrange
 	assert.Equal(t, "c", mapping[0x12])
 }
 
+func TestDecodePDFNameDecodesHexEscapes(t *testing.T) {
+	got := decodePDFName("/F#31#20A")
+	if got != "/F1 A" {
+		t.Fatalf("decodePDFName() = %q, want %q", got, "/F1 A")
+	}
+}
+
+func TestUTF16BytesToStringDecodesSurrogatePairs(t *testing.T) {
+	got := utf16BytesToString([]byte{0xD8, 0x3D, 0xDE, 0x00})
+	if got != "😀" {
+		t.Fatalf("utf16BytesToString() = %q, want %q", got, "😀")
+	}
+}
+
 func TestExtractTextChunksPreservesTrailingSpace(t *testing.T) {
 	pdf := writeTextPDF(t, "BT /F1 12 Tf 72 400 Td (Hello ) Tj (World) Tj ET\n")
 	doc, err := model.Open(pdf, "")

@@ -24,6 +24,8 @@ type TextLine struct {
 	IsFirstLine      bool
 	IsLastLine       bool
 	HasStrikethrough bool
+	InListItem       bool
+	InTableCell      bool
 }
 
 func (l *TextLine) GetObjectType() ObjectType { return ObjectTypeTextLine }

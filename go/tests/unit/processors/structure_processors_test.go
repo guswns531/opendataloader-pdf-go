@@ -32,6 +32,21 @@ func TestLevelProcessorAssignsDescendingHeadingLevels(t *testing.T) {
 	assert.Equal(t, 3, result[3].Level)
 }
 
+func TestLevelProcessorGroupsNearlyEqualFontSizes(t *testing.T) {
+	headings := []*entities.SemanticHeading{
+		{FontSize: 12.0001, IsBold: true, FontFamily: "Body"},
+		{FontSize: 11.9999, IsBold: true, FontFamily: "Body"},
+		{FontSize: 10.8, FontFamily: "Body"},
+	}
+
+	result := (&processors.LevelProcessor{}).Process(headings)
+
+	require.Len(t, result, 3)
+	assert.Equal(t, 1, result[0].Level)
+	assert.Equal(t, 1, result[1].Level)
+	assert.Equal(t, 2, result[2].Level)
+}
+
 func TestCaptionProcessorCreatesSemanticCaption(t *testing.T) {
 	ctx := containers.NewProcessorContext()
 	line := plainLine("Figure 1. Example caption", 50, 700, 180)

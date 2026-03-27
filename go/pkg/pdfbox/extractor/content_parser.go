@@ -288,7 +288,7 @@ func (s *streamScanner) readName() string {
 	for s.pos < len(s.data) && !isDelimiter(s.data[s.pos]) {
 		s.pos++
 	}
-	return string(s.data[start:s.pos])
+	return decodePDFName(string(s.data[start:s.pos]))
 }
 
 func (s *streamScanner) readWord() string {
@@ -334,6 +334,25 @@ func isDelimiter(ch byte) bool {
 	default:
 		return isWhiteSpace(ch)
 	}
+}
+
+func decodePDFName(name string) string {
+	if name == "" || !strings.Contains(name, "#") {
+		return name
+	}
+	var sb strings.Builder
+	sb.Grow(len(name))
+	for i := 0; i < len(name); i++ {
+		if name[i] == '#' && i+2 < len(name) {
+			if b, err := hex.DecodeString(name[i+1 : i+3]); err == nil && len(b) == 1 {
+				sb.WriteByte(b[0])
+				i += 2
+				continue
+			}
+		}
+		sb.WriteByte(name[i])
+	}
+	return sb.String()
 }
 
 func normalizePDFString(b []byte) string {

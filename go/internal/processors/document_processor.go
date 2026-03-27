@@ -96,12 +96,11 @@ func (p *DocumentProcessor) processJavaDocument(doc *entities.Document, config *
 			rawElements = append(rawElements, chunk)
 		}
 
-		var pageElements []entities.IObject
+		pageElements := rawElements
 		if config.TableMethod == api.TableMethodCluster {
-			pageElements = (&ClusterTableProcessor{}).Process(rawElements, ctx)
-		} else {
-			pageElements = (&TableBorderProcessor{}).Process(rawElements, page.LineArts, ctx)
+			pageElements = (&ClusterTableProcessor{}).Process(pageElements, ctx)
 		}
+		pageElements = (&TableBorderProcessor{}).Process(pageElements, page.LineArts, ctx)
 
 		tablesAndOther, textChunks := splitTextChunks(pageElements)
 		lines := (&TextLineProcessor{}).Process(textChunks, page.LineArts, ctx)
@@ -112,14 +111,14 @@ func (p *DocumentProcessor) processJavaDocument(doc *entities.Document, config *
 		pageElements = append(tablesAndOther, textLinesToObjects(lines)...)
 		pageElements = sortObjects(pageElements)
 
-		if config.TableMethod != api.TableMethodCluster {
-			pageElements = (&SpecialTableProcessor{}).Process(pageElements, ctx)
-		}
+		pageElements = (&SpecialTableProcessor{}).Process(pageElements, ctx)
 
 		pageElements = (&HeaderFooterProcessor{}).Process(pageElements, page.Height, config.IncludeHeaderFooter, ctx)
 		pageElements = (&ListProcessor{}).Process(pageElements, ctx)
 		var pageHeadings []*entities.SemanticHeading
 		pageElements, pageHeadings = transformTextRuns(pageElements, ctx)
+		headings = append(headings, pageHeadings...)
+		pageElements, pageHeadings = (&HeadingProcessor{}).PromoteListHeadings(pageElements, ctx)
 		headings = append(headings, pageHeadings...)
 		pageElements = (&CaptionProcessor{}).Process(pageElements, ctx)
 		page.Elements = sortObjects(pageElements)

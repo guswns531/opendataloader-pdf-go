@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/pkg/pdfbox/model"
 	pdfmodel "github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
@@ -309,11 +310,11 @@ func utf16BytesToString(b []byte) string {
 		b = append([]byte(nil), b...)
 		b = append(b, 0)
 	}
-	runes := make([]rune, 0, len(b)/2)
+	units := make([]uint16, 0, len(b)/2)
 	for i := 0; i+1 < len(b); i += 2 {
-		runes = append(runes, rune(uint16(b[i])<<8|uint16(b[i+1])))
+		units = append(units, uint16(b[i])<<8|uint16(b[i+1]))
 	}
-	return string(runes)
+	return string(utf16.Decode(units))
 }
 
 func incrementHexBytes(b []byte) {
@@ -366,7 +367,8 @@ func macRomanTable() [256]rune {
 	if err != nil {
 		return table
 	}
-	for i, r := range decoded {
+	runes := []rune(decoded)
+	for i, r := range runes {
 		table[i] = r
 	}
 	return table
@@ -404,10 +406,16 @@ func standardEncodingTable() [256]rune {
 }
 
 func symbolEncodingTable() [256]rune {
+	// Preserve the current fallback until a verified Symbol-to-Unicode table is
+	// added. Changing this without the actual mapping would regress existing
+	// behavior.
 	return standardEncodingTable()
 }
 
 func zapfDingbatsTable() [256]rune {
+	// Preserve the current fallback until a verified ZapfDingbats-to-Unicode
+	// table is added. Changing this without the actual mapping would regress
+	// existing behavior.
 	return standardEncodingTable()
 }
 

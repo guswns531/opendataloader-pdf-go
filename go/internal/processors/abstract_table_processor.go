@@ -26,20 +26,26 @@ type AbstractTableProcessor struct{}
 func getPagesWithPossibleTables(contents [][]entities.IObject) []int {
 	pageNumbers := make([]int, 0)
 	for pageNumber, pageContents := range contents {
-		var previous *entities.TextChunk
-		for _, content := range pageContents {
-			current, ok := content.(*entities.TextChunk)
-			if !ok || isWhitespaceChunk(current) {
-				continue
-			}
-			if previous != nil && areSuspiciousTextChunks(previous, current) {
-				pageNumbers = append(pageNumbers, pageNumber)
-				break
-			}
-			previous = current
+		if hasPossibleTable(pageContents) {
+			pageNumbers = append(pageNumbers, pageNumber)
 		}
 	}
 	return pageNumbers
+}
+
+func hasPossibleTable(contents []entities.IObject) bool {
+	var previous *entities.TextChunk
+	for _, content := range contents {
+		current, ok := content.(*entities.TextChunk)
+		if !ok || isWhitespaceChunk(current) {
+			continue
+		}
+		if previous != nil && areSuspiciousTextChunks(previous, current) {
+			return true
+		}
+		previous = current
+	}
+	return false
 }
 
 func areSuspiciousTextChunks(previous, current *entities.TextChunk) bool {

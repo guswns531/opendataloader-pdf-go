@@ -60,6 +60,37 @@ func TestClusterTableProcessorDetectsChunkGridTable(t *testing.T) {
 	assert.Equal(t, "B2", cellText(table.Rows[1].Cells[1]))
 }
 
+func TestClusterTableProcessorDoesNotConvertSparseProseClusterToTable(t *testing.T) {
+	processor := &processors.ClusterTableProcessor{}
+	ctx := containers.NewProcessorContext()
+
+	elements := []entities.IObject{
+		chunk("Intro", 50, 180, 30, 10),
+		chunk("text", 120, 180, 25, 10),
+		chunk("wraps", 210, 180, 30, 10),
+		chunk("Across", 50, 166, 35, 10),
+		chunk("different", 160, 166, 45, 10),
+		chunk("x", 280, 166, 8, 10),
+		chunk("positions", 50, 152, 45, 10),
+		chunk("move", 190, 152, 28, 10),
+		chunk("again", 330, 152, 30, 10),
+		chunk("more", 50, 138, 24, 10),
+		chunk("staggered", 140, 138, 42, 10),
+		chunk("words", 260, 138, 28, 10),
+		chunk("final", 50, 124, 24, 10),
+		chunk("line", 175, 124, 22, 10),
+		chunk("tail", 310, 124, 20, 10),
+	}
+
+	result := processor.Process(elements, ctx)
+
+	require.Len(t, result, len(elements))
+	for _, element := range result {
+		_, isTable := element.(*entities.SemanticTable)
+		assert.False(t, isTable)
+	}
+}
+
 func chunk(text string, x, y, width, height float64) *entities.TextChunk {
 	return &entities.TextChunk{
 		BaseObject: entities.BaseObject{

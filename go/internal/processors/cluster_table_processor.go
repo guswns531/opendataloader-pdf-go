@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	clusterAlignmentFloor = 3.0
-	clusterMinPoints      = 2
+	clusterAlignmentFloor  = 3.0
+	clusterMinPoints       = 2
+	clusterColumnTolerance = 5.0
 )
 
 type ClusterTableProcessor struct {
@@ -21,6 +22,10 @@ type ClusterTableProcessor struct {
 }
 
 func (p *ClusterTableProcessor) Process(elements []entities.IObject, ctx *containers.ProcessorContext) []entities.IObject {
+	if !hasPossibleTable(elements) {
+		return append([]entities.IObject(nil), elements...)
+	}
+
 	chunks := make([]*entities.TextChunk, 0)
 	for _, element := range elements {
 		chunk, ok := element.(*entities.TextChunk)
@@ -177,7 +182,7 @@ func clusterToTable(cluster []*entities.TextChunk, ctx *containers.ProcessorCont
 		rowBounds = append(rowBounds, bottom)
 	}
 
-	colBounds := uniqueSorted(append(colStarts, maxRight), tableAlignmentTolerance, false)
+	colBounds := uniqueSorted(append(clusterColumnStarts(colStarts, clusterColumnTolerance), maxRight), tableAlignmentTolerance, false)
 	if len(colBounds) < 3 {
 		return nil
 	}
@@ -209,4 +214,27 @@ func expandBBox(box entities.BoundingBox, padding float64) entities.BoundingBox 
 		Height: box.Height + padding*2,
 		Page:   box.Page,
 	}
+}
+
+func clusterColumnStarts(values []float64, tolerance float64) []float64 {
+	if len(values) == 0 {
+		return nil
+	}
+	sorted := append([]float64(nil), values...)
+	sort.Float64s(sorted)
+
+	clustered := make([]float64, 0, len(sorted))
+	clusterStart := sorted[0]
+	previous := sorted[0]
+	for _, value := range sorted[1:] {
+		if value-previous <= tolerance {
+			previous = value
+			continue
+		}
+		clustered = append(clustered, clusterStart)
+		clusterStart = value
+		previous = value
+	}
+	clustered = append(clustered, clusterStart)
+	return clustered
 }

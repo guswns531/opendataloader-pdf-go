@@ -8,6 +8,7 @@
 package processors
 
 import (
+	"math"
 	"sort"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
@@ -33,8 +34,9 @@ func (p *LevelProcessor) Process(headings []*entities.SemanticHeading) []*entiti
 		if heading == nil {
 			continue
 		}
+		roundedSize := math.Round(heading.FontSize*10) / 10
 		key := headingStyleKey{
-			FontSize:   heading.FontSize,
+			FontSize:   roundedSize,
 			IsBold:     heading.IsBold,
 			IsItalic:   heading.IsItalic,
 			FontFamily: heading.FontFamily,

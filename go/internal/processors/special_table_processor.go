@@ -256,6 +256,7 @@ func buildSpecialKoreanTable(lines []*entities.TextLine, ctx *containers.Process
 			BBox:  line.GetBBox(),
 		}
 		if colon < 0 {
+			line.InTableCell = true
 			cell := entities.NewTableCell(rowIdx, 0, 1, 2, line.GetBBox(), []entities.IObject{line})
 			row.Cells = append(row.Cells, cell)
 		} else {
