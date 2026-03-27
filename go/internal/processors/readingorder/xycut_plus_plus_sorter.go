@@ -29,6 +29,8 @@ const (
 	sidebarMaxWidthRatio    = 0.45
 	sidebarEdgeSlack        = 20.0
 	sidebarMinMainCount     = 3
+	stackedEdgeColumnCount  = 3
+	stackedEdgeGapSlack     = 12.0
 )
 
 type XYCutPlusPlusSorter struct {
@@ -160,7 +162,11 @@ func (s XYCutPlusPlusSorter) sortWithColumnAwareness(objects []entities.IObject,
 				mainRegion = region
 			}
 			sortedMain := s.sortWithColumnAwareness(remaining, preferHorizontalFirst, mainRegion)
-			return mergeDeferredFloatingElements(sortedMain, marginalFloating)
+			edgeColumns, deferredFloating := partitionStackedEdgeFloatingColumns(marginalFloating, region)
+			if len(edgeColumns) > 0 {
+				sortedMain = mergeDeferredEdgeColumns(sortedMain, edgeColumns)
+			}
+			return mergeDeferredFloatingElements(sortedMain, deferredFloating)
 		}
 	}
 
@@ -814,6 +820,146 @@ func mergeDeferredFloatingElements(sortedMain, floating []entities.IObject) []en
 		result = append(result, sortedMain[mainIndex:]...)
 	}
 	return result
+}
+
+func partitionStackedEdgeFloatingColumns(floating []entities.IObject, region entities.BoundingBox) ([][]entities.IObject, []entities.IObject) {
+	if len(floating) < stackedEdgeColumnCount {
+		return nil, floating
+	}
+
+	type edgeGroup struct {
+		side    string
+		members []entities.IObject
+	}
+
+	var groups []edgeGroup
+	for _, obj := range floating {
+		side := floatingEdgeSide(obj.GetBBox(), region)
+		if side == "" {
+			continue
+		}
+
+		placed := false
+		for idx := range groups {
+			if groups[idx].side != side || !sameStackedEdgeColumn(groups[idx].members[0].GetBBox(), obj.GetBBox(), side) {
+				continue
+			}
+			groups[idx].members = append(groups[idx].members, obj)
+			placed = true
+			break
+		}
+		if !placed {
+			groups = append(groups, edgeGroup{side: side, members: []entities.IObject{obj}})
+		}
+	}
+
+	stackedSet := make(map[string]struct{})
+	columns := make([][]entities.IObject, 0, len(groups))
+	for _, group := range groups {
+		if !isStackedEdgeColumn(group.members) {
+			continue
+		}
+		column := sortByYThenX(group.members)
+		for _, obj := range column {
+			stackedSet[obj.GetID()] = struct{}{}
+		}
+		columns = append(columns, column)
+	}
+
+	if len(columns) == 0 {
+		return nil, floating
+	}
+
+	regular := make([]entities.IObject, 0, len(floating)-len(stackedSet))
+	for _, obj := range floating {
+		if _, ok := stackedSet[obj.GetID()]; !ok {
+			regular = append(regular, obj)
+		}
+	}
+
+	sort.Slice(columns, func(i, j int) bool {
+		return calculateBoundingRegion(columns[i]).Y+calculateBoundingRegion(columns[i]).Height >
+			calculateBoundingRegion(columns[j]).Y+calculateBoundingRegion(columns[j]).Height
+	})
+
+	return columns, regular
+}
+
+func floatingEdgeSide(b, region entities.BoundingBox) string {
+	if regionTouchesHorizontalEdge(b, region, sidebarEdgeSlack) {
+		if b.X-region.X <= sidebarEdgeSlack {
+			return "left"
+		}
+		return "right"
+	}
+	return ""
+}
+
+func sameStackedEdgeColumn(a, b entities.BoundingBox, side string) bool {
+	if math.Abs(a.Width-b.Width) > minGapThreshold {
+		return false
+	}
+	if math.Abs(a.X-b.X) > minGapThreshold {
+		return false
+	}
+
+	if side == "right" {
+		aRight := a.X + a.Width
+		bRight := b.X + b.Width
+		return math.Abs(aRight-bRight) <= minGapThreshold
+	}
+
+	return true
+}
+
+func isStackedEdgeColumn(objects []entities.IObject) bool {
+	if len(objects) < stackedEdgeColumnCount {
+		return false
+	}
+
+	sorted := sortByYThenX(objects)
+	for idx := 1; idx < len(sorted); idx++ {
+		prev := sorted[idx-1].GetBBox()
+		curr := sorted[idx].GetBBox()
+		gap := prev.Y - (curr.Y + curr.Height)
+		if gap < 0 || gap > stackedEdgeGapSlack {
+			return false
+		}
+	}
+	return true
+}
+
+func mergeDeferredEdgeColumns(sortedMain []entities.IObject, edgeColumns [][]entities.IObject) []entities.IObject {
+	if len(edgeColumns) == 0 {
+		return sortedMain
+	}
+
+	result := cloneObjects(sortedMain)
+	for _, column := range edgeColumns {
+		insertAt := findDeferredEdgeColumnInsertionIndex(result, column)
+		merged := make([]entities.IObject, 0, len(result)+len(column))
+		merged = append(merged, result[:insertAt]...)
+		merged = append(merged, column...)
+		merged = append(merged, result[insertAt:]...)
+		result = merged
+	}
+	return result
+}
+
+func findDeferredEdgeColumnInsertionIndex(sortedMain, column []entities.IObject) int {
+	if len(sortedMain) == 0 {
+		return 0
+	}
+
+	columnRegion := calculateBoundingRegion(column)
+	columnBottom := columnRegion.Y
+	for idx, obj := range sortedMain {
+		b := obj.GetBBox()
+		if calculateHorizontalOverlapRatio(b, columnRegion) >= overlapThreshold && b.Y+b.Height/2 <= columnBottom {
+			return idx
+		}
+	}
+	return len(sortedMain)
 }
 
 func sortByYThenX(objects []entities.IObject) []entities.IObject {

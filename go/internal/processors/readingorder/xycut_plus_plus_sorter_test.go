@@ -171,6 +171,69 @@ func TestXYCutFallsBackAfterDeepDegenerateRecursion(t *testing.T) {
 	}
 }
 
+func TestXYCutKeepsRightColumnImageGridGroupedAfterLeftTrailBlock(t *testing.T) {
+	objects := []entities.IObject{
+		testTextChunk("667", 14.04, 232.0, 22.32, 345.52),
+		testTextChunk("646", 130.151, 652.242, 334.926, 36.597),
+		testTextChunk("647", 82.271, 567.65, 434.445, 62.673),
+		testTextChunk("648", 145.995, 528.628, 44.485, 15.554),
+		testTextChunk("649", 50.112, 173.942, 236.25, 338.206),
+		testTextChunk("650", 50.112, 129.636, 236.247, 27.13),
+		testTextChunk("653", 315.944, 496.162, 70.864, 42.52),
+		testTextChunk("654", 315.945, 452.648, 70.862, 42.519),
+		testTextChunk("655", 315.945, 409.132, 70.863, 42.52),
+		testTextChunk("657", 392.918, 496.162, 70.865, 42.52),
+		testTextChunk("658", 392.918, 452.646, 70.865, 42.52),
+		testTextChunk("659", 392.918, 409.13, 70.865, 42.52),
+		testTextChunk("660", 469.89, 496.163, 70.87, 42.52),
+		testTextChunk("661", 469.889, 452.647, 70.871, 42.52),
+		testTextChunk("662", 469.89, 409.131, 70.869, 42.521),
+		testTextChunk("656", 308.862, 360.946, 236.253, 49.36),
+		testTextChunk("663", 308.862, 328.315, 76.836, 15.554),
+		testTextChunk("664", 308.862, 200.233, 236.247, 121.538),
+		testTextChunk("665", 308.862, 105.211, 236.247, 94.44),
+		testTextChunk("666", 308.862, 77.935, 236.247, 26.694),
+	}
+
+	sorted := XYCutPlusPlusSorter{}.Sort(objects, 595, 842)
+
+	positions := map[string]int{}
+	for idx, text := range objectTexts(sorted) {
+		positions[text] = idx
+	}
+
+	imageIDs := []string{"653", "654", "655", "657", "658", "659", "660", "661", "662"}
+	minImagePos, maxImagePos := len(sorted), -1
+	for _, id := range imageIDs {
+		pos, ok := positions[id]
+		if !ok {
+			t.Fatalf("missing image %s in sort order %v", id, objectTexts(sorted))
+		}
+		if pos < minImagePos {
+			minImagePos = pos
+		}
+		if pos > maxImagePos {
+			maxImagePos = pos
+		}
+	}
+
+	if maxImagePos-minImagePos != len(imageIDs)-1 {
+		t.Fatalf("expected image grid to stay consecutive, got %v", objectTexts(sorted))
+	}
+	if positions["650"] >= minImagePos {
+		t.Fatalf("expected 650 before image grid, got %v", objectTexts(sorted))
+	}
+	if maxImagePos >= positions["656"] {
+		t.Fatalf("expected image grid before 656, got %v", objectTexts(sorted))
+	}
+	if !(positions["667"] < positions["650"] || positions["667"] > positions["666"]) {
+		t.Fatalf("expected 667 outside the 650..666 body/grid band, got %v", objectTexts(sorted))
+	}
+	if !(positions["663"] < positions["664"] && positions["664"] < positions["665"] && positions["665"] < positions["666"]) {
+		t.Fatalf("expected right-column continuation order after 656, got %v", objectTexts(sorted))
+	}
+}
+
 func testTextChunk(id string, x, y, width, height float64) *entities.TextChunk {
 	return &entities.TextChunk{
 		BaseObject: entities.BaseObject{
