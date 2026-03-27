@@ -216,6 +216,10 @@ func parseCMapContent(content string) (map[uint32]string, []int, error) {
 	mapping := map[uint32]string{}
 	codeLensSet := map[int]struct{}{}
 	mode := ""
+	var pendingRangeStart uint32
+	var pendingRangeEnd uint32
+	var pendingRangeValues []string
+	pendingRangeActive := false
 	for _, rawLine := range lines {
 		line := strings.TrimSpace(rawLine)
 		switch {
@@ -233,11 +237,11 @@ func parseCMapContent(content string) (map[uint32]string, []int, error) {
 			continue
 		}
 		matches := cmapHexPattern.FindAllStringSubmatch(line, -1)
-		if len(matches) == 0 {
-			continue
-		}
 		switch mode {
 		case "bfchar":
+			if len(matches) == 0 {
+				continue
+			}
 			if len(matches) < 2 {
 				continue
 			}
@@ -252,7 +256,22 @@ func parseCMapContent(content string) (map[uint32]string, []int, error) {
 			mapping[cmapCode(src)] = dst
 			codeLensSet[len(src)] = struct{}{}
 		case "bfrange":
-			if len(matches) < 3 {
+			if pendingRangeActive {
+				pendingRangeValues = append(pendingRangeValues, matchesToHex(matches)...)
+				if !strings.Contains(line, "]") {
+					continue
+				}
+				if err := addCMapRangeArray(mapping, pendingRangeStart, pendingRangeEnd, pendingRangeValues); err != nil {
+					return nil, nil, err
+				}
+				pendingRangeActive = false
+				pendingRangeValues = nil
+				continue
+			}
+			if len(matches) == 0 {
+				continue
+			}
+			if len(matches) < 2 {
 				continue
 			}
 			startBytes, err := hex.DecodeString(matches[0][1])
@@ -267,13 +286,19 @@ func parseCMapContent(content string) (map[uint32]string, []int, error) {
 			end := cmapCode(endBytes)
 			codeLensSet[len(startBytes)] = struct{}{}
 			if strings.Contains(line, "[") {
-				for i, match := range matches[2:] {
-					dst, err := decodeCMapUnicode(match[1])
-					if err != nil {
-						return nil, nil, err
-					}
-					mapping[start+uint32(i)] = dst
+				if !strings.Contains(line, "]") {
+					pendingRangeStart = start
+					pendingRangeEnd = end
+					pendingRangeValues = append(pendingRangeValues[:0], matchesToHex(matches[2:])...)
+					pendingRangeActive = true
+					continue
 				}
+				if err := addCMapRangeArray(mapping, start, end, matchesToHex(matches[2:])); err != nil {
+					return nil, nil, err
+				}
+				continue
+			}
+			if len(matches) < 3 {
 				continue
 			}
 			dstBytes, err := hex.DecodeString(matches[2][1])
@@ -292,6 +317,29 @@ func parseCMapContent(content string) (map[uint32]string, []int, error) {
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(codeLens)))
 	return mapping, codeLens, nil
+}
+
+func addCMapRangeArray(mapping map[uint32]string, start, end uint32, values []string) error {
+	limit := end - start + 1
+	for i, hexValue := range values {
+		if uint32(i) >= limit {
+			break
+		}
+		dst, err := decodeCMapUnicode(hexValue)
+		if err != nil {
+			return err
+		}
+		mapping[start+uint32(i)] = dst
+	}
+	return nil
+}
+
+func matchesToHex(matches [][]string) []string {
+	values := make([]string, 0, len(matches))
+	for _, match := range matches {
+		values = append(values, match[1])
+	}
+	return values
 }
 
 func decodeCMapUnicode(hexValue string) (string, error) {

@@ -78,6 +78,32 @@ endbfrange
 	assert.Equal(t, "c", mapping[0x12])
 }
 
+func TestParseCMapContentDecodesMultiLineBFRangeArray(t *testing.T) {
+	cmap := `
+1 beginbfrange
+<0001> <0003> [
+<00E9>
+<00F1>
+<20AC>
+]
+endbfrange
+`
+	mapping, codeLens, err := parseCMapContent(cmap)
+	require.NoError(t, err)
+	assert.Equal(t, []int{2}, codeLens)
+	assert.Equal(t, "é", mapping[0x0001])
+	assert.Equal(t, "ñ", mapping[0x0002])
+	assert.Equal(t, "€", mapping[0x0003])
+
+	decoder := &fontDecoder{
+		hasFont:   true,
+		toUnicode: mapping,
+		codeLens:  codeLens,
+		encoding:  standardEncodingTable(),
+	}
+	assert.Equal(t, "éñ€", decoder.decode([]byte{0x00, 0x01, 0x00, 0x02, 0x00, 0x03}))
+}
+
 func TestDecodePDFNameDecodesHexEscapes(t *testing.T) {
 	got := decodePDFName("/F#31#20A")
 	if got != "/F1 A" {
