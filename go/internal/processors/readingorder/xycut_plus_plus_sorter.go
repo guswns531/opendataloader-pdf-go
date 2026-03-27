@@ -8,6 +8,7 @@
 package readingorder
 
 import (
+	"math"
 	"sort"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
@@ -23,7 +24,6 @@ const (
 	columnMinObjectCount    = 4
 	columnMinRegionRatio    = 0.20
 	columnMaxRegionRatio    = 0.80
-	columnMinGapRatio       = 0.03
 	columnHistogramBuckets  = 100
 )
 
@@ -178,7 +178,12 @@ func detectColumnSplit(objects []entities.IObject, regionX, regionWidth float64)
 		if startIdx < 0 {
 			startIdx = 0
 		}
-		endIdx := int((endX - minX) / bucketWidth)
+		// Treat spans as half-open so elements ending on a bucket boundary
+		// do not erase a real gutter in the next bucket.
+		endIdx := int(math.Ceil((endX-minX)/bucketWidth)) - 1
+		if endIdx < 0 {
+			endIdx = 0
+		}
 		if endIdx >= columnHistogramBuckets {
 			endIdx = columnHistogramBuckets - 1
 		}
@@ -197,22 +202,18 @@ func detectColumnSplit(objects []entities.IObject, regionX, regionWidth float64)
 			currentLen++
 			continue
 		}
-		if currentLen > bestGapLen {
+		if currentStart > 0 && currentLen > bestGapLen {
 			bestGapStart = currentStart
 			bestGapLen = currentLen
 		}
 		currentStart, currentLen = -1, 0
-	}
-	if currentLen > bestGapLen {
-		bestGapStart = currentStart
-		bestGapLen = currentLen
 	}
 	if bestGapLen <= 0 {
 		return -1
 	}
 
 	actualGapWidth := float64(bestGapLen) * bucketWidth
-	if actualGapWidth < regionWidth*columnMinGapRatio {
+	if actualGapWidth < minGapThreshold {
 		return -1
 	}
 

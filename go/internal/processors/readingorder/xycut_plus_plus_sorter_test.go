@@ -46,6 +46,42 @@ func TestXYCutRecursivelySortsMultipleColumnsLeftToRight(t *testing.T) {
 	})
 }
 
+func TestXYCutDetectsTwoColumnsWhenGutterLandsOnHistogramBoundary(t *testing.T) {
+	objects := []entities.IObject{
+		testTextChunk("left-top", 150, 160, 46, 10),
+		testTextChunk("right-top", 211, 160, 46, 10),
+		testTextChunk("left-bottom", 150, 120, 46, 10),
+		testTextChunk("right-bottom", 211, 120, 46, 10),
+	}
+
+	sorted := XYCutPlusPlusSorter{}.Sort(objects, 500, 240)
+
+	assertObjectTexts(t, sorted, []string{
+		"left-top",
+		"left-bottom",
+		"right-top",
+		"right-bottom",
+	})
+}
+
+func TestXYCutKeepsBasicTwoColumnsGroupedWithModestGutter(t *testing.T) {
+	objects := []entities.IObject{
+		testTextChunk("left-top", 50, 160, 250, 20),
+		testTextChunk("right-top", 310, 160, 250, 20),
+		testTextChunk("left-bottom", 50, 120, 250, 20),
+		testTextChunk("right-bottom", 310, 120, 250, 20),
+	}
+
+	sorted := XYCutPlusPlusSorter{}.Sort(objects, 600, 240)
+
+	assertObjectTexts(t, sorted, []string{
+		"left-top",
+		"left-bottom",
+		"right-top",
+		"right-bottom",
+	})
+}
+
 func testTextChunk(id string, x, y, width, height float64) *entities.TextChunk {
 	return &entities.TextChunk{
 		BaseObject: entities.BaseObject{
