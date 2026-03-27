@@ -26,7 +26,7 @@ const (
 	distinctFontFamilyHeadingBoost     = 0.55
 )
 
-var sectionHeadingPrefixPattern = regexp.MustCompile(`^(?:(?:\d+(?:\.\d+)*)|[A-Z]|[IVXLCDM]+)\.\s+\S`)
+var sectionHeadingPrefixPattern = regexp.MustCompile(`^(?:(?:(?:\d+(?:\.\d+)*)\.?|[A-Z]\.|[IVXLCDM]+\.)\s+\p{L}|[IVXLCDM]{2,}\s+\p{L})`)
 
 type HeadingProcessor struct{}
 
@@ -145,6 +145,9 @@ func (p *HeadingProcessor) headingScore(line, prevLine, nextLine *entities.TextL
 	}
 	if looksLikeSectionHeadingText(text) {
 		score += sectionHeadingProbabilityIncrease
+	}
+	if isColonSuffixedHeadingText(line, text) {
+		score += 0.15
 	}
 	if strings.HasSuffix(text, ".") || strings.HasSuffix(text, ",") {
 		score -= 0.1
@@ -504,6 +507,65 @@ func headingWordCount(text string) int {
 	return len(strings.FieldsFunc(text, func(r rune) bool {
 		return unicode.IsSpace(r) || strings.ContainsRune(".,;:!?()[]{}<>/\\|\"'“”‘’•*-_=+`~", r)
 	}))
+}
+
+func isColonSuffixedHeadingText(line *entities.TextLine, text string) bool {
+	if line == nil || line.InListItem || line.InTableCell {
+		return false
+	}
+	text = strings.TrimSpace(text)
+	if !strings.HasSuffix(text, ":") {
+		return false
+	}
+	wordCount := headingWordCount(text)
+	if wordCount < 2 || wordCount > 8 {
+		return false
+	}
+	if utils.IsOrderedBullet(text) || utils.IsUnorderedBullet(text) {
+		return false
+	}
+	return !startsWithListLikePrefix(text)
+}
+
+func startsWithListLikePrefix(text string) bool {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return false
+	}
+	for _, prefix := range []string{"(", "[", "{", "\"", "'", "“", "‘"} {
+		text = strings.TrimLeft(text, prefix)
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return false
+	}
+	fields := strings.Fields(text)
+	if len(fields) == 0 {
+		return false
+	}
+	first := fields[0]
+	if first == "" {
+		return false
+	}
+	last := rune(first[len(first)-1])
+	if last != '.' && last != ')' && last != ':' {
+		return false
+	}
+	token := strings.TrimRight(first, ".):")
+	if token == "" {
+		return false
+	}
+	hasDigit := false
+	for _, r := range token {
+		if unicode.IsDigit(r) {
+			hasDigit = true
+			continue
+		}
+		if r != '.' {
+			return false
+		}
+	}
+	return hasDigit
 }
 
 func nextID(ctx *containers.ProcessorContext) string {

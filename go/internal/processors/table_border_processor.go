@@ -46,6 +46,10 @@ func (p *TableBorderProcessor) processNode(elements []entities.IObject, lineArts
 	remainders := make([]entities.IObject, 0)
 
 	for _, table := range tables {
+		if !isMeaningfulBorderTable(table) {
+			continue
+		}
+
 		cellContents := make(map[[2]int][]entities.IObject)
 		for idx, element := range elements {
 			if used[idx] || !bboxIntersects(table.bbox, element.GetBBox()) {
@@ -236,8 +240,11 @@ func detectFallbackEnclosingTable(lineArts []*entities.LineArtChunk) (detectedTa
 		return detectedTable{}, false
 	}
 
-	rowBounds := uniqueSorted([]float64{maxY, minY}, tableAlignmentTolerance, true)
-	colBounds := uniqueSorted([]float64{minX, maxX}, tableAlignmentTolerance, false)
+	rowBounds := collectHorizontalBounds(horizontal, minX, maxX, minY, maxY)
+	colBounds := collectVerticalBounds(vertical, minX, maxX, minY, maxY)
+	if !hasInternalDivider(rowBounds, maxY, minY) && !hasInternalDivider(colBounds, minX, maxX) {
+		return detectedTable{}, false
+	}
 	if len(rowBounds) < 2 || len(colBounds) < 2 {
 		return detectedTable{}, false
 	}
@@ -268,17 +275,33 @@ func containsDetectedTable(existing []detectedTable, candidate detectedTable) bo
 }
 
 func topLevelTables(candidates []detectedTable) []detectedTable {
-	result := make([]detectedTable, 0, len(candidates))
-	for idx, candidate := range candidates {
+	if len(candidates) <= 1 {
+		return candidates
+	}
+
+	sorted := append([]detectedTable(nil), candidates...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		leftArea := bboxArea(sorted[i].bbox)
+		rightArea := bboxArea(sorted[j].bbox)
+		if !areClose(leftArea, rightArea, tableAlignmentTolerance) {
+			return leftArea > rightArea
+		}
+		leftGrid := tableGridSize(sorted[i])
+		rightGrid := tableGridSize(sorted[j])
+		if leftGrid != rightGrid {
+			return leftGrid > rightGrid
+		}
+		if !areClose(sorted[i].bbox.Y, sorted[j].bbox.Y, tableAlignmentTolerance) {
+			return sorted[i].bbox.Y > sorted[j].bbox.Y
+		}
+		return sorted[i].bbox.X < sorted[j].bbox.X
+	})
+
+	result := make([]detectedTable, 0, len(sorted))
+	for _, candidate := range sorted {
 		contained := false
-		for jdx, other := range candidates {
-			if idx == jdx {
-				continue
-			}
-			if sameBBox(candidate.bbox, other.bbox) {
-				continue
-			}
-			if bboxContains(other.bbox, candidate.bbox) {
+		for _, kept := range result {
+			if sameBBox(candidate.bbox, kept.bbox) || bboxSubsetOf(candidate.bbox, kept.bbox) {
 				contained = true
 				break
 			}
@@ -287,6 +310,13 @@ func topLevelTables(candidates []detectedTable) []detectedTable {
 			result = append(result, candidate)
 		}
 	}
+
+	sort.SliceStable(result, func(i, j int) bool {
+		if !areClose(result[i].bbox.Y, result[j].bbox.Y, tableAlignmentTolerance) {
+			return result[i].bbox.Y > result[j].bbox.Y
+		}
+		return result[i].bbox.X < result[j].bbox.X
+	})
 	return result
 }
 
@@ -401,6 +431,37 @@ func sameBBox(a, b entities.BoundingBox) bool {
 		areClose(a.Y, b.Y, tableAlignmentTolerance) &&
 		areClose(a.Width, b.Width, tableAlignmentTolerance) &&
 		areClose(a.Height, b.Height, tableAlignmentTolerance)
+}
+
+func bboxSubsetOf(inner, outer entities.BoundingBox) bool {
+	if inner.Page != outer.Page || sameBBox(inner, outer) {
+		return false
+	}
+	return bboxLeft(inner) >= bboxLeft(outer)-tableAlignmentTolerance &&
+		bboxRight(inner) <= bboxRight(outer)+tableAlignmentTolerance &&
+		bboxBottom(inner) >= bboxBottom(outer)-tableAlignmentTolerance &&
+		bboxTop(inner) <= bboxTop(outer)+tableAlignmentTolerance
+}
+
+func hasInternalDivider(bounds []float64, outerA, outerB float64) bool {
+	for _, value := range bounds {
+		if !areClose(value, outerA, tableAlignmentTolerance) && !areClose(value, outerB, tableAlignmentTolerance) {
+			return true
+		}
+	}
+	return false
+}
+
+func isMeaningfulBorderTable(table detectedTable) bool {
+	return len(table.rowBounds) >= 3 && len(table.colBounds) >= 3
+}
+
+func bboxArea(box entities.BoundingBox) float64 {
+	return math.Abs(box.Width * box.Height)
+}
+
+func tableGridSize(table detectedTable) int {
+	return (len(table.rowBounds) - 1) * (len(table.colBounds) - 1)
 }
 
 func firstSemanticTable(contents []entities.IObject) (*entities.SemanticTable, bool) {

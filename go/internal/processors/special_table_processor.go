@@ -17,6 +17,12 @@ type SpecialTableProcessor struct {
 }
 
 var koreanSpecialTablePattern = regexp.MustCompile(`^\(?(수신|경유|제목)\)?.*`)
+var tocEntryPattern = regexp.MustCompile(`(?i)^.{1,160}(?:\.{2,}|\s{2,})\s*[0-9ivxlcdm]+$`)
+var tableCaptionPattern = regexp.MustCompile(`(?i)^\s*(table|tab\.?|chart)\s*[A-Z0-9.-]*\s*(?::|-|$)`)
+var outlinePageValuePattern = regexp.MustCompile(`^(?:\d+|[ivxlcdm]+|[\d/.,-]+)$`)
+var dottedLeaderPattern = regexp.MustCompile(`^\.+$`)
+var pageNumberPattern = regexp.MustCompile(`^(?:\d+|[ivxlcdm]+)$`)
+var punctuationTokenPattern = regexp.MustCompile(`^[\p{P}\p{S}]+$`)
 
 func (p *SpecialTableProcessor) Process(elements []entities.IObject, ctx *containers.ProcessorContext) []entities.IObject {
 	koreanDetected := detectSpecialKoreanTables(elements, ctx)
@@ -126,11 +132,19 @@ func detectAlignmentTables(lines []*entities.TextLine, ctx *containers.Processor
 	consumed := make([]*entities.TextLine, 0)
 	var group []*entities.TextLine
 	var signature []float64
+	groupStart := -1
 
 	flush := func() {
 		if len(group) < 2 || len(signature) < 2 {
 			group = nil
 			signature = nil
+			groupStart = -1
+			return
+		}
+		if !isLikelyAlignedTextTable(group, signature, lines, groupStart) {
+			group = nil
+			signature = nil
+			groupStart = -1
 			return
 		}
 		if table := buildAlignedTextTable(group, signature, ctx); table != nil && len(table.Rows) >= 2 {
@@ -139,9 +153,10 @@ func detectAlignmentTables(lines []*entities.TextLine, ctx *containers.Processor
 		}
 		group = nil
 		signature = nil
+		groupStart = -1
 	}
 
-	for _, line := range lines {
+	for idx, line := range lines {
 		positions := lineColumnPositions(line)
 		if len(positions) < 2 {
 			flush()
@@ -150,6 +165,7 @@ func detectAlignmentTables(lines []*entities.TextLine, ctx *containers.Processor
 		if len(group) == 0 {
 			group = append(group, line)
 			signature = positions
+			groupStart = idx
 			continue
 		}
 		if columnPositionsMatch(signature, positions) {
@@ -160,6 +176,7 @@ func detectAlignmentTables(lines []*entities.TextLine, ctx *containers.Processor
 		flush()
 		group = append(group, line)
 		signature = positions
+		groupStart = idx
 	}
 	flush()
 
@@ -198,6 +215,264 @@ func mergePositions(a, b []float64) []float64 {
 		merged[idx] = (a[idx] + b[idx]) / 2
 	}
 	return merged
+}
+
+func isLikelyAlignedTextTable(group []*entities.TextLine, positions []float64, allLines []*entities.TextLine, groupStart int) bool {
+	if len(group) < 2 || len(positions) < 2 {
+		return false
+	}
+	if hasNearbyTableCaption(allLines, groupStart, len(group)) {
+		return true
+	}
+	cells := alignedGroupCellTexts(group, positions)
+	totalCells := 0
+	numericCells := 0
+	singleTokenLikeCells := 0
+	colWordTotals := make([]int, len(positions))
+	colCellCounts := make([]int, len(positions))
+
+	for _, row := range cells {
+		for colIdx, text := range row {
+			text = strings.TrimSpace(text)
+			if text == "" {
+				continue
+			}
+			totalCells++
+			if containsDigit(text) {
+				numericCells++
+			}
+			if isSingleTokenLikeCell(text) {
+				singleTokenLikeCells++
+			}
+			colWordTotals[colIdx] += wordCount(text)
+			colCellCounts[colIdx]++
+		}
+	}
+
+	if totalCells == 0 {
+		return false
+	}
+	if looksLikeOutlineTable(cells) || looksLikeNumericAxisTable(cells) {
+		return false
+	}
+	if len(group) == 2 && float64(numericCells)/float64(totalCells) < 0.1 {
+		return false
+	}
+	if looksLikeTOCGroup(group) {
+		return false
+	}
+	if len(positions) != 2 {
+		return true
+	}
+	if float64(singleTokenLikeCells)/float64(totalCells) > 0.7 {
+		return false
+	}
+
+	bothColumnsAreProse := true
+	for idx := range colWordTotals {
+		if colCellCounts[idx] == 0 || float64(colWordTotals[idx])/float64(colCellCounts[idx]) <= 3.5 {
+			bothColumnsAreProse = false
+			break
+		}
+	}
+	if bothColumnsAreProse {
+		return false
+	}
+
+	if float64(numericCells)/float64(totalCells) < 0.1 {
+		return false
+	}
+	return true
+}
+
+func hasNearbyTableCaption(lines []*entities.TextLine, groupStart, groupLen int) bool {
+	if groupStart < 0 {
+		return false
+	}
+	start := groupStart - 30
+	if start < 0 {
+		start = 0
+	}
+	end := groupStart + groupLen + 30
+	if end > len(lines) {
+		end = len(lines)
+	}
+	for idx := start; idx < end; idx++ {
+		if idx >= groupStart && idx < groupStart+groupLen {
+			continue
+		}
+		text := normalizedLineText(lines[idx])
+		if text != "" && len(text) <= 160 && tableCaptionPattern.MatchString(text) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeTOCGroup(group []*entities.TextLine) bool {
+	matches := 0
+	for _, line := range group {
+		if looksLikeTOCLine(line) {
+			matches++
+		}
+	}
+	return matches > 0 && matches*2 >= len(group)
+}
+
+func looksLikeOutlineTable(cells [][]string) bool {
+	if len(cells) < 2 || len(cells[0]) < 2 {
+		return false
+	}
+
+	lastCol := len(cells[0]) - 1
+	lastColNonEmpty := 0
+	lastColPageValues := 0
+	numericTokenCells := 0
+	nonEmptyCells := 0
+
+	for _, row := range cells {
+		if len(row) <= lastCol {
+			continue
+		}
+		for colIdx, text := range row {
+			text = strings.TrimSpace(text)
+			if text == "" {
+				continue
+			}
+			nonEmptyCells++
+			if isNumericTokenCell(text) {
+				numericTokenCells++
+			}
+			if colIdx == lastCol {
+				lastColNonEmpty++
+				if isOutlinePageValue(text) {
+					lastColPageValues++
+				}
+			}
+		}
+	}
+
+	if lastColNonEmpty == 0 || float64(lastColPageValues)/float64(lastColNonEmpty) < 0.6 {
+		return false
+	}
+	return nonEmptyCells > 0 && float64(numericTokenCells)/float64(nonEmptyCells) < 0.7
+}
+
+func looksLikeNumericAxisTable(cells [][]string) bool {
+	if len(cells) < 4 || len(cells[0]) != 2 {
+		return false
+	}
+
+	firstColValues := make(map[string]struct{})
+	numericLikeCells := 0
+	nonEmptyCells := 0
+
+	for _, row := range cells {
+		if len(row) != 2 {
+			return false
+		}
+		left := strings.TrimSpace(row[0])
+		right := strings.TrimSpace(row[1])
+		if left != "" {
+			firstColValues[left] = struct{}{}
+		}
+		for _, text := range []string{left, right} {
+			if text == "" {
+				continue
+			}
+			nonEmptyCells++
+			if isNumericTokenCell(text) {
+				numericLikeCells++
+			}
+		}
+	}
+
+	return nonEmptyCells > 0 &&
+		len(firstColValues) <= 2 &&
+		float64(numericLikeCells)/float64(nonEmptyCells) >= 0.9
+}
+
+func looksLikeTOCLine(line *entities.TextLine) bool {
+	text := normalizedLineText(line)
+	if text == "" {
+		return false
+	}
+	return tocEntryPattern.MatchString(text)
+}
+
+func normalizedLineText(line *entities.TextLine) string {
+	parts := make([]string, 0, len(line.Chunks))
+	for _, chunk := range line.Chunks {
+		if chunk == nil || isWhitespaceChunk(chunk) {
+			continue
+		}
+		value := strings.TrimSpace(chunk.Text)
+		if value != "" {
+			parts = append(parts, value)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func alignedGroupCellTexts(group []*entities.TextLine, positions []float64) [][]string {
+	rows := make([][]string, 0, len(group))
+	for _, line := range group {
+		row := make([]string, len(positions))
+		for _, chunk := range line.Chunks {
+			if chunk == nil || isWhitespaceChunk(chunk) {
+				continue
+			}
+			colIdx := nearestColumn(positions, chunk.GetBBox().X)
+			if colIdx < 0 || colIdx >= len(row) {
+				continue
+			}
+			value := strings.TrimSpace(chunk.Text)
+			if value == "" {
+				continue
+			}
+			if row[colIdx] == "" {
+				row[colIdx] = value
+			} else {
+				row[colIdx] += " " + value
+			}
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func containsDigit(text string) bool {
+	return strings.ContainsAny(text, "0123456789")
+}
+
+func isOutlinePageValue(text string) bool {
+	text = strings.ReplaceAll(strings.ToLower(strings.TrimSpace(text)), " ", "")
+	return outlinePageValuePattern.MatchString(text)
+}
+
+func wordCount(text string) int {
+	return len(strings.Fields(strings.TrimSpace(text)))
+}
+
+func isNumericTokenCell(text string) bool {
+	text = strings.ReplaceAll(strings.TrimSpace(text), " ", "")
+	if text == "" || wordCount(text) > 1 {
+		return false
+	}
+	return outlinePageValuePattern.MatchString(strings.ToLower(text))
+}
+
+func isSingleTokenLikeCell(text string) bool {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return false
+	}
+	if wordCount(text) > 1 {
+		return false
+	}
+	return dottedLeaderPattern.MatchString(text) ||
+		pageNumberPattern.MatchString(strings.ToLower(text)) ||
+		punctuationTokenPattern.MatchString(text)
 }
 
 func buildAlignedTextTable(lines []*entities.TextLine, positions []float64, ctx *containers.ProcessorContext) *entities.SemanticTable {

@@ -61,6 +61,68 @@ func TestHeadingScoreRejectsSingleTokenMathFragments(t *testing.T) {
 	}
 }
 
+func TestLooksLikeSectionHeadingTextMatchesPrefixesWithoutTrailingDot(t *testing.T) {
+	cases := []string{
+		"8 Choosing between Observer Models and Rejecting Participants",
+		"12 Conclusion",
+		"1.2 Background",
+		"IV Methods",
+		"IV. Methods",
+	}
+	for _, text := range cases {
+		if !looksLikeSectionHeadingText(text) {
+			t.Fatalf("expected section heading match for %q", text)
+		}
+	}
+}
+
+func TestLooksLikeSectionHeadingTextRejectsFootnoteLikeAndProsePrefixes(t *testing.T) {
+	cases := []string{
+		"18 ., <SimultaneityNoisyCriteriaMultistart 225-386>",
+		"I have presented two variants of a latency-based observer model",
+		"12 .",
+	}
+	for _, text := range cases {
+		if looksLikeSectionHeadingText(text) {
+			t.Fatalf("expected non-heading prefix rejection for %q", text)
+		}
+	}
+}
+
+func TestHeadingScoreBoostsColonSuffixedTitleLines(t *testing.T) {
+	processor := &HeadingProcessor{}
+	stats := utils.NewTextNodeStatistics()
+	body := testHeadingLine("Regular body text for statistics", 10, 700, 220, 12, 12, false)
+	stats.Add(lineFontSize(body), lineFontWeight(body))
+
+	colonTitle := testHeadingLine("Steps for Using the Microscope:", 10, 680, 190, 12, 12, false)
+	plainLine := testHeadingLine("Steps for Using the Microscope", 10, 680, 190, 12, 12, false)
+
+	colonScore := processor.headingScore(colonTitle, body, nil, 12, lineFontFamily(body), stats)
+	plainScore := processor.headingScore(plainLine, body, nil, 12, lineFontFamily(body), stats)
+
+	if colonScore <= plainScore {
+		t.Fatalf("expected colon-suffixed title to score higher: colon=%.2f plain=%.2f", colonScore, plainScore)
+	}
+}
+
+func TestHeadingScoreDoesNotBoostColonSuffixedNumberedListItems(t *testing.T) {
+	processor := &HeadingProcessor{}
+	stats := utils.NewTextNodeStatistics()
+	body := testHeadingLine("Regular body text for statistics", 10, 700, 220, 12, 12, false)
+	stats.Add(lineFontSize(body), lineFontWeight(body))
+
+	numbered := testHeadingLine("1. Steps for Using the Microscope:", 10, 680, 210, 12, 12, false)
+	plain := testHeadingLine("1. Steps for Using the Microscope", 10, 680, 210, 12, 12, false)
+
+	numberedScore := processor.headingScore(numbered, body, nil, 12, lineFontFamily(body), stats)
+	plainScore := processor.headingScore(plain, body, nil, 12, lineFontFamily(body), stats)
+
+	if numberedScore != plainScore {
+		t.Fatalf("expected numbered colon line to avoid boost: colon=%.2f plain=%.2f", numberedScore, plainScore)
+	}
+}
+
 func testHeadingLine(text string, x, y, width, height, fontSize float64, bold bool) *entities.TextLine {
 	chunk := &entities.TextChunk{
 		BaseObject: entities.BaseObject{
