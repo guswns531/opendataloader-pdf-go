@@ -16,6 +16,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/pkg/pdfbox/model"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
@@ -553,20 +555,69 @@ func textWidthEstimate(text string, fontSize float64) float64 {
 }
 
 func decodeTJText(tok streamToken) string {
+	return decodeTJTextItems(tok, nil)
+}
+
+func decodeTJTextItems(tok streamToken, decodeText func(streamToken) string) string {
 	if tok.kind != "array" {
 		return ""
 	}
 	var sb strings.Builder
+	pendingSpace := false
 	for _, item := range tok.items {
 		if item.kind == "string" || item.kind == "hex" {
-			sb.WriteString(item.value)
+			text := item.value
+			if decodeText != nil {
+				text = decodeText(item)
+			}
+			if text == "" {
+				continue
+			}
+			if pendingSpace && shouldInsertTJSpace(sb.String(), text) {
+				sb.WriteByte(' ')
+			}
+			sb.WriteString(text)
+			pendingSpace = false
 		} else if item.kind == "number" {
 			if v, ok := parseFloatToken(item); ok && v <= tjSpaceThreshold {
-				sb.WriteByte(' ')
+				pendingSpace = sb.Len() > 0
 			}
 		}
 	}
 	return normalizeExtractedText(sb.String())
+}
+
+func shouldInsertTJSpace(prefix, next string) bool {
+	if prefix == "" || next == "" {
+		return false
+	}
+	last, _ := utf8LastRuneInString(prefix)
+	first, _ := utf8FirstRuneInString(next)
+	return !unicode.IsSpace(last) && !unicode.IsSpace(first)
+}
+
+func utf8LastRuneInString(s string) (rune, int) {
+	for i := len(s); i > 0; {
+		r, size := utf8.DecodeLastRuneInString(s[:i])
+		if r == utf8.RuneError && size == 1 {
+			i--
+			continue
+		}
+		return r, size
+	}
+	return utf8.RuneError, 0
+}
+
+func utf8FirstRuneInString(s string) (rune, int) {
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 1 {
+			i++
+			continue
+		}
+		return r, size
+	}
+	return utf8.RuneError, 0
 }
 
 func normalizeExtractedText(text string) string {

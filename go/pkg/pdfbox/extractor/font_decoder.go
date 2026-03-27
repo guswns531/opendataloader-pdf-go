@@ -345,20 +345,9 @@ func decodeTextToken(tok streamToken, decoder *fontDecoder) string {
 }
 
 func decodeTJTextWithFont(tok streamToken, decoder *fontDecoder) string {
-	if tok.kind != "array" {
-		return ""
-	}
-	var sb strings.Builder
-	for _, item := range tok.items {
-		if item.kind == "string" || item.kind == "hex" {
-			sb.WriteString(decodeTextToken(item, decoder))
-		} else if item.kind == "number" {
-			if v, ok := parseFloatToken(item); ok && v <= tjSpaceThreshold {
-				sb.WriteByte(' ')
-			}
-		}
-	}
-	return normalizeExtractedText(sb.String())
+	return decodeTJTextItems(tok, func(item streamToken) string {
+		return decodeTextToken(item, decoder)
+	})
 }
 
 func macRomanTable() [256]rune {

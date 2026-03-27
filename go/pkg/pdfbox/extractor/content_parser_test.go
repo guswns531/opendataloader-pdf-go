@@ -26,6 +26,21 @@ func TestDecodeTJTextInsertsSpaceAtThreshold(t *testing.T) {
 	assert.Equal(t, "A B", got)
 }
 
+func TestDecodeTJTextDoesNotEmitDanglingOrDuplicateRecoveredSpaces(t *testing.T) {
+	got := decodeTJText(streamToken{
+		kind: "array",
+		items: []streamToken{
+			{kind: "number", value: "-250"},
+			{kind: "string", value: "A "},
+			{kind: "number", value: "-250"},
+			{kind: "string", value: "B"},
+			{kind: "number", value: "-250"},
+		},
+	})
+
+	assert.Equal(t, "A B", got)
+}
+
 func TestNormalizePDFStringDecodesWinAnsiAndLigature(t *testing.T) {
 	assert.Equal(t, "Euro: €", normalizePDFString([]byte("Euro: \x80")))
 	assert.Equal(t, "Rectified", normalizePDFString([]byte("Recti\x02ed")))
@@ -76,6 +91,18 @@ func TestExtractTextChunksPreservesTrailingSpace(t *testing.T) {
 	require.Len(t, chunks, 2)
 	assert.Equal(t, "Hello ", chunks[0].Text)
 	assert.Equal(t, "World", chunks[1].Text)
+}
+
+func TestExtractTextChunksRecoversSpaceFromTJOffsets(t *testing.T) {
+	pdf := writeTextPDF(t, "BT /F1 12 Tf 72 400 Td [(A)-250(Multi-Object)-250(Rectified)-250(Attention)-250(Network)] TJ ET\n")
+	doc, err := model.Open(pdf, "")
+	require.NoError(t, err)
+	defer doc.Close()
+
+	chunks, err := ExtractTextChunks(doc, 0)
+	require.NoError(t, err)
+	require.Len(t, chunks, 1)
+	assert.Equal(t, "A Multi-Object Rectified Attention Network", chunks[0].Text)
 }
 
 func writeTextPDF(t *testing.T, content string) string {
