@@ -58,6 +58,18 @@ func TestFontDecoderWinAnsiTableDecodesExtendedBytes(t *testing.T) {
 	assert.Equal(t, "ASCII stays ASCII", decoder.decode([]byte("ASCII stays ASCII")))
 }
 
+func TestFontDecoderWinAnsiTableMatchesRawWinAnsiFallbackForUndefinedBytes(t *testing.T) {
+	raw := []byte{0x81, 0x8d, 0x8f, 0x90, 0x9d}
+	decoder := &fontDecoder{
+		hasFont:   true,
+		encoding:  winAnsiTable(),
+		toUnicode: nil,
+	}
+
+	assert.Equal(t, normalizePDFString(raw), decoder.decode(raw))
+	assert.NotContains(t, decoder.decode(raw), "\uFFFD")
+}
+
 func TestParseCMapContentDecodesBFCharAndBFRange(t *testing.T) {
 	cmap := `
 2 beginbfchar
