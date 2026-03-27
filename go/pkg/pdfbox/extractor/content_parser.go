@@ -431,15 +431,7 @@ func decodeWinAnsi(b []byte) string {
 			sb.WriteString(ligature)
 			continue
 		}
-		if ch < 0x80 {
-			sb.WriteRune(rune(ch))
-			continue
-		}
-		if r, ok := win1252Extras[ch]; ok {
-			sb.WriteRune(r)
-			continue
-		}
-		sb.WriteRune(rune(ch))
+		sb.WriteRune(winAnsiRune(ch))
 	}
 	return sb.String()
 }
