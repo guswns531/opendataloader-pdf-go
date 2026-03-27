@@ -8,7 +8,7 @@
 
 ## Decision
 
-`DISCARD`
+`KEEP`
 
 ## Why this loop existed
 

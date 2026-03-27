@@ -119,6 +119,27 @@ func TestExtractTextChunksAvoidFalseOverlapForSurveyIEEEFixture(t *testing.T) {
 	assert.True(t, gap > 0 || math.Abs(gap) <= 0.5, "expected no material false overlap, got gap %.3f", gap)
 }
 
+func TestExtractTextChunksRecoversTJSpacingForMORANTitleFixture(t *testing.T) {
+	pdf := filepath.Join("..", "..", "..", "samples", "pdf", "1901.03003.pdf")
+	if _, err := os.Stat(pdf); err != nil {
+		t.Skip("fixture not available")
+	}
+
+	doc, err := model.Open(pdf, "")
+	require.NoError(t, err)
+	defer doc.Close()
+
+	chunks, err := extractor.ExtractTextChunks(doc, 0)
+	require.NoError(t, err)
+
+	titleIdx := findChunkIndex(chunks, "A Multi-Object")
+	require.NotEqual(t, -1, titleIdx)
+	assert.Contains(t, chunks[titleIdx].Text, "A Multi-Object Recti")
+	assert.NotContains(t, chunks[titleIdx].Text, "AMulti-Object")
+	assert.NotContains(t, chunks[titleIdx].Text, "ObjectRecti")
+	assert.NotContains(t, chunks[titleIdx].Text, "RectifiedAttention")
+}
+
 func findChunkIndex(chunks []*extractor.ExtractedText, needle string) int {
 	for i, chunk := range chunks {
 		if chunk != nil && strings.Contains(chunk.Text, needle) {
