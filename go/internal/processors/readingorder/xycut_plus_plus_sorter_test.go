@@ -1,6 +1,8 @@
 package readingorder
 
 import (
+	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
@@ -144,6 +146,29 @@ func TestXYCutDefersMarginalSidebarUntilAfterMainBodyBand(t *testing.T) {
 		"sidebar",
 		"footer",
 	})
+}
+
+func TestXYCutFallsBackAfterDeepDegenerateRecursion(t *testing.T) {
+	const objectCount = maxSegmentDepth + 32
+
+	objects := make([]entities.IObject, 0, objectCount)
+	for i := 0; i < objectCount; i++ {
+		x := 20.0 + float64(i)*15.0
+		objects = append(objects, testTextChunk(fmt.Sprintf("item-%03d", i), x, 100, 8, 10))
+	}
+
+	sorter := XYCutPlusPlusSorter{}
+	want := objectTexts(sorter.Sort(objects, 4000, 200))
+	if len(want) != objectCount {
+		t.Fatalf("expected %d objects, got %d", objectCount, len(want))
+	}
+
+	for run := 0; run < 5; run++ {
+		got := objectTexts(sorter.Sort(objects, 4000, 200))
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("run %d produced unstable order: want %v, got %v", run, want, got)
+		}
+	}
 }
 
 func testTextChunk(id string, x, y, width, height float64) *entities.TextChunk {

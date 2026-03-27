@@ -21,6 +21,7 @@ const (
 	minOverlapCount         = 2
 	minGapThreshold         = 5.0
 	defaultMinWidthRatio    = 0.05
+	maxSegmentDepth         = 128
 	columnMinObjectCount    = 4
 	columnMinRegionRatio    = 0.20
 	columnMaxRegionRatio    = 0.80
@@ -79,8 +80,15 @@ type cutInfo struct {
 }
 
 func (s XYCutPlusPlusSorter) recursiveSegment(objects []entities.IObject, preferHorizontalFirst bool, regionX, pageWidth, pageHeight float64) []entities.IObject {
+	return s.recursiveSegmentWithDepth(objects, preferHorizontalFirst, regionX, pageWidth, pageHeight, 0)
+}
+
+func (s XYCutPlusPlusSorter) recursiveSegmentWithDepth(objects []entities.IObject, preferHorizontalFirst bool, regionX, pageWidth, pageHeight float64, depth int) []entities.IObject {
 	if len(objects) <= 1 {
 		return cloneObjects(objects)
+	}
+	if depth >= maxSegmentDepth {
+		return sortByYThenX(objects)
 	}
 
 	horizontalCut := findBestHorizontalCutWithProjection(objects)
@@ -124,7 +132,7 @@ func (s XYCutPlusPlusSorter) recursiveSegment(objects []entities.IObject, prefer
 			nextRegionX = groupRegion.X
 			nextPageWidth = groupRegion.Width
 		}
-		result = append(result, s.recursiveSegment(group, preferHorizontalFirst, nextRegionX, nextPageWidth, pageHeight)...)
+		result = append(result, s.recursiveSegmentWithDepth(group, preferHorizontalFirst, nextRegionX, nextPageWidth, pageHeight, depth+1)...)
 	}
 	return result
 }
