@@ -112,6 +112,34 @@ func TestGenerateSpanTableUsesHTMLWithTableSections(t *testing.T) {
 	}
 }
 
+func TestRenderLinesJoinsDiscretionaryLineWrapHyphen(t *testing.T) {
+	g := NewMarkdownGenerator(nil, false, false)
+	lines := []*entities.TextLine{
+		{Chunks: []*entities.TextChunk{{Text: "More-"}}},
+		{Chunks: []*entities.TextChunk{{Text: "over, methods based on convolutional neural networks"}}},
+	}
+
+	got := g.renderLines(lines, false)
+
+	if got != "Moreover, methods based on convolutional neural networks" {
+		t.Fatalf("expected discretionary line-wrap hyphen to join, got %q", got)
+	}
+}
+
+func TestRenderLinesPreservesRealCompoundHyphen(t *testing.T) {
+	g := NewMarkdownGenerator(nil, false, false)
+	lines := []*entities.TextLine{
+		{Chunks: []*entities.TextChunk{{Text: "attention-based"}}},
+		{Chunks: []*entities.TextChunk{{Text: "sequence recognition network"}}},
+	}
+
+	got := g.renderLines(lines, false)
+
+	if got != "attention-based sequence recognition network" {
+		t.Fatalf("expected real compound hyphen to be preserved, got %q", got)
+	}
+}
+
 func newTextCell(row, col int, text string) *entities.TableCell {
 	return newSpanTextCell(row, col, 1, 1, text)
 }

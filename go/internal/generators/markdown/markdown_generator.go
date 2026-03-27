@@ -9,12 +9,15 @@ package markdown
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/api"
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/utils"
 )
+
+var discretionaryLineHyphenPattern = regexp.MustCompile(`[A-Z][a-z]+-$`)
 
 type MarkdownGenerator struct {
 	config       *api.Config
@@ -454,7 +457,48 @@ func (g *MarkdownGenerator) renderLines(lines []*entities.TextLine, keepLineBrea
 		}
 		return joined
 	}
-	return strings.Join(parts, Space)
+	return joinMarkdownParagraphLines(parts)
+}
+
+func joinMarkdownParagraphLines(parts []string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString(parts[0])
+
+	for i := 1; i < len(parts); i++ {
+		next := parts[i]
+		current := b.String()
+		if shouldJoinDiscretionaryLineHyphen(current, next) {
+			b.Reset()
+			b.WriteString(strings.TrimSuffix(current, "-"))
+			b.WriteString(strings.TrimLeft(next, Space))
+			continue
+		}
+		b.WriteString(Space)
+		b.WriteString(next)
+	}
+
+	return b.String()
+}
+
+func shouldJoinDiscretionaryLineHyphen(previous, next string) bool {
+	previous = strings.TrimSpace(previous)
+	next = strings.TrimLeft(next, Space)
+	if previous == "" || next == "" || !strings.HasSuffix(previous, "-") {
+		return false
+	}
+	runes := []rune(next)
+	if len(runes) == 0 || runes[0] < 'a' || runes[0] > 'z' {
+		return false
+	}
+	lastWord := previous
+	if idx := strings.LastIndexAny(previous, " \t\n"); idx >= 0 {
+		lastWord = previous[idx+1:]
+	}
+	return discretionaryLineHyphenPattern.MatchString(lastWord)
 }
 
 func (g *MarkdownGenerator) renderTextLine(line *entities.TextLine) string {

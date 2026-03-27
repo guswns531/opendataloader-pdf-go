@@ -161,3 +161,43 @@ func TestProcessJavaDocumentSuppressesIntrawordSyntheticSpacesInFixture(t *testi
 		t.Fatalf("unexpected intra-word synthetic spacing in output: %q", output)
 	}
 }
+
+func TestProcessJavaDocumentJoinsDiscretionarySoftHyphenLineWrapInFixture(t *testing.T) {
+	pdf := repoPath("samples", "pdf", "1901.03003.pdf")
+	if _, err := os.Stat(pdf); err != nil {
+		t.Skip("fixture not available")
+	}
+	cfg := api.DefaultConfig()
+	cfg.Pages = "1"
+	cfg.ImageOutput = api.ImageOutputOff
+
+	ctx := containers.NewProcessorContext()
+	processor := NewDocumentProcessor()
+	doc, err := processor.loadDocument(pdf, cfg, ctx)
+	if err != nil {
+		t.Fatalf("loadDocument() error = %v", err)
+	}
+
+	processed, err := processor.processJavaDocument(doc, cfg, ctx)
+	if err != nil {
+		t.Fatalf("processJavaDocument() error = %v", err)
+	}
+
+	output, err := markdown.NewMarkdownGenerator(cfg, false, false).Generate(processed)
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	if !strings.Contains(output, "have achieved notable success. Moreover, methods based on convolutional neural networks") {
+		t.Fatalf("expected fixture output to join discretionary line-wrap hyphen, got %q", output)
+	}
+	if strings.Contains(output, "More- over, methods") {
+		t.Fatalf("unexpected split discretionary hyphen in output: %q", output)
+	}
+	if !strings.Contains(output, "attention-based sequence recognition") {
+		t.Fatalf("expected genuine compound hyphen to be preserved, got %q", output)
+	}
+	if strings.Contains(output, "attentionbased") {
+		t.Fatalf("unexpected collapsed genuine compound in output: %q", output)
+	}
+}
