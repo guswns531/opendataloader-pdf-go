@@ -7,6 +7,8 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/containers"
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/entities"
@@ -16,6 +18,7 @@ const (
 	textLineBaselineTolerance = 0.5
 	textLineSpaceRatio        = 0.3
 	textLineTabRatio          = 2.0
+	textLineWordBoundaryRatio = 0.12
 	listLabelHeightEpsilon    = 1.5
 	lineArtBulletGapMax       = 20.0
 	lineArtBaselineTolerance  = 5.0
@@ -103,10 +106,11 @@ func addSyntheticSpacing(chunks []*entities.TextChunk) []*entities.TextChunk {
 	result = append(result, chunks[0])
 	previousEnd := chunks[0].BBox.X + chunks[0].BBox.Width
 	for i := 1; i < len(chunks); i++ {
+		previous := chunks[i-1]
 		current := chunks[i]
 		currentStart := current.BBox.X
 		gap := currentStart - previousEnd
-		if gap > spaceThreshold {
+		if shouldInsertSyntheticSpace(previous, current, gap, avgCharWidth, spaceThreshold) {
 			spacingText := " "
 			if gap > tabThreshold {
 				spacingText = "\t"
@@ -130,6 +134,65 @@ func addSyntheticSpacing(chunks []*entities.TextChunk) []*entities.TextChunk {
 	}
 
 	return result
+}
+
+func shouldInsertSyntheticSpace(previous, current *entities.TextChunk, gap, avgCharWidth, spaceThreshold float64) bool {
+	if gap <= 0 {
+		return false
+	}
+	if gap > spaceThreshold {
+		return true
+	}
+	if avgCharWidth <= 0 || gap <= avgCharWidth*textLineWordBoundaryRatio {
+		return false
+	}
+	return looksLikeInlineWordBoundary(previous, current)
+}
+
+func looksLikeInlineWordBoundary(previous, current *entities.TextChunk) bool {
+	prevRune, ok := lastNonSpaceRune(previous)
+	if !ok {
+		return false
+	}
+	nextRune, ok := firstNonSpaceRune(current)
+	if !ok {
+		return false
+	}
+	return isWordBoundaryRune(prevRune) && isWordBoundaryRune(nextRune)
+}
+
+func lastNonSpaceRune(chunk *entities.TextChunk) (rune, bool) {
+	if chunk == nil {
+		return 0, false
+	}
+	text := strings.TrimRightFunc(chunk.Text, unicode.IsSpace)
+	if text == "" {
+		return 0, false
+	}
+	r, _ := utf8.DecodeLastRuneInString(text)
+	if r == utf8.RuneError {
+		return 0, false
+	}
+	return r, true
+}
+
+func firstNonSpaceRune(chunk *entities.TextChunk) (rune, bool) {
+	if chunk == nil {
+		return 0, false
+	}
+	text := strings.TrimLeftFunc(chunk.Text, unicode.IsSpace)
+	if text == "" {
+		return 0, false
+	}
+	r, _ := utf8.DecodeRuneInString(text)
+	if r == utf8.RuneError {
+		return 0, false
+	}
+	return r, true
+}
+
+func isWordBoundaryRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
 func linkTextLinesWithConnectedLineArt(lines []*entities.TextLine, lineArts []*entities.LineArtChunk) {

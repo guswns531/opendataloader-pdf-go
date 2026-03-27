@@ -18,7 +18,7 @@ func TestTextLineProcessorGroupsChunksOnSameBaseline(t *testing.T) {
 	ctx := containers.NewProcessorContext()
 	chunks := []*entities.TextChunk{
 		newTextChunk("Hello", 10, 100, 20, 10, 12, 100),
-		newTextChunk("world", 31, 100, 25, 10, 12, 100),
+		newTextChunk("world", 30, 100, 25, 10, 12, 100),
 	}
 
 	lines := processor.Process(chunks, nil, ctx)
@@ -64,6 +64,20 @@ func TestTextLineProcessorInsertsSpaceAndLinksLineArtBullet(t *testing.T) {
 	assert.Len(t, lines, 1)
 	assert.Equal(t, "Item one", lines[0].GetText())
 	assert.NotNil(t, lines[0].LineArtBullet)
+}
+
+func TestTextLineProcessorInsertsSpaceForSmallPositiveWordBoundaryGap(t *testing.T) {
+	processor := &processors.TextLineProcessor{}
+	ctx := containers.NewProcessorContext()
+	chunks := []*entities.TextChunk{
+		newTextChunk("In", 10, 100, 8, 10, 12, 100),
+		newTextChunk("Proceedings", 19, 100, 55, 10, 12, 100),
+	}
+
+	lines := processor.Process(chunks, nil, ctx)
+
+	assert.Len(t, lines, 1)
+	assert.Equal(t, "In Proceedings", lines[0].GetText())
 }
 
 func newTextChunk(text string, x, y, width, height, fontSize, baseline float64) *entities.TextChunk {

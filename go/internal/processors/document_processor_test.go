@@ -1,10 +1,14 @@
 package processors
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/internal/api"
+	"github.com/opendataloader-project/opendataloader-pdf-go/internal/containers"
+	"github.com/opendataloader-project/opendataloader-pdf-go/internal/generators/markdown"
 )
 
 func TestParsePageRangePreservesOrderAndDuplicates(t *testing.T) {
@@ -79,5 +83,39 @@ func TestResolveImageDirDefaultsToOutputFolder(t *testing.T) {
 	want := filepath.Join("/tmp/out", "sample_images")
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestProcessJavaDocumentPreservesBibliographyBoundarySpaceInFixture(t *testing.T) {
+	pdf := filepath.Clean("../../../samples/pdf/1901.03003.pdf")
+	if _, err := os.Stat(pdf); err != nil {
+		t.Skip("fixture not available")
+	}
+	cfg := api.DefaultConfig()
+	cfg.Pages = "15"
+	cfg.ImageOutput = api.ImageOutputOff
+
+	ctx := containers.NewProcessorContext()
+	processor := NewDocumentProcessor()
+	doc, err := processor.loadDocument(pdf, cfg, ctx)
+	if err != nil {
+		t.Fatalf("loadDocument() error = %v", err)
+	}
+
+	processed, err := processor.processJavaDocument(doc, cfg, ctx)
+	if err != nil {
+		t.Fatalf("processJavaDocument() error = %v", err)
+	}
+
+	output, err := markdown.NewMarkdownGenerator(cfg, false, false).Generate(processed)
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	if !strings.Contains(output, "Word spotting in the wild. In Proceedings of European Conference on Computer") {
+		t.Fatalf("expected bibliography output to preserve boundary space, got %q", output)
+	}
+	if strings.Contains(output, "Word spotting in the wild. InProceedings") {
+		t.Fatalf("unexpected joined bibliography boundary in output: %q", output)
 	}
 }
