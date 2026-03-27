@@ -124,6 +124,28 @@ func TestXYCutTreatsGutterSpanningBlocksAsNeutralDuringColumnMerge(t *testing.T)
 	})
 }
 
+func TestXYCutDefersMarginalSidebarUntilAfterMainBodyBand(t *testing.T) {
+	objects := []entities.IObject{
+		testTextChunk("sidebar", 10, 95, 18, 85),
+		testTextChunk("left-top", 70, 170, 35, 10),
+		testTextChunk("right-top", 125, 170, 35, 10),
+		testTextChunk("left-bottom", 70, 130, 35, 10),
+		testTextChunk("right-bottom", 125, 130, 35, 10),
+		testTextChunk("footer", 70, 60, 90, 10),
+	}
+
+	sorted := XYCutPlusPlusSorter{}.Sort(objects, 200, 240)
+
+	assertObjectTexts(t, sorted, []string{
+		"left-top",
+		"left-bottom",
+		"right-top",
+		"right-bottom",
+		"sidebar",
+		"footer",
+	})
+}
+
 func testTextChunk(id string, x, y, width, height float64) *entities.TextChunk {
 	return &entities.TextChunk{
 		BaseObject: entities.BaseObject{

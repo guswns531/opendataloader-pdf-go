@@ -25,6 +25,9 @@ const (
 	columnMinRegionRatio    = 0.20
 	columnMaxRegionRatio    = 0.80
 	columnHistogramBuckets  = 100
+	sidebarMaxWidthRatio    = 0.45
+	sidebarEdgeSlack        = 20.0
+	sidebarMinMainCount     = 3
 )
 
 type XYCutPlusPlusSorter struct {
@@ -131,6 +134,28 @@ func (s XYCutPlusPlusSorter) sortWithColumnAwareness(objects []entities.IObject,
 		return cloneObjects(objects)
 	}
 
+	marginalFloating := identifyMarginalFloatingElements(objects, region)
+	if len(marginalFloating) > 0 && len(marginalFloating) < len(objects) {
+		floatingSet := make(map[string]struct{}, len(marginalFloating))
+		remaining := make([]entities.IObject, 0, len(objects)-len(marginalFloating))
+		for _, obj := range marginalFloating {
+			floatingSet[obj.GetID()] = struct{}{}
+		}
+		for _, obj := range objects {
+			if _, ok := floatingSet[obj.GetID()]; !ok {
+				remaining = append(remaining, obj)
+			}
+		}
+		if len(remaining) >= sidebarMinMainCount {
+			mainRegion := calculateBoundingRegion(remaining)
+			if mainRegion.Width <= 0 {
+				mainRegion = region
+			}
+			sortedMain := s.sortWithColumnAwareness(remaining, preferHorizontalFirst, mainRegion)
+			return mergeDeferredFloatingElements(sortedMain, marginalFloating)
+		}
+	}
+
 	if gapX := detectColumnSplit(objects, region.X, region.Width); gapX >= 0 {
 		left, right, neutral := splitByVerticalCutWithNeutral(objects, gapX)
 		if len(left) > 0 && len(right) > 0 {
@@ -141,6 +166,14 @@ func (s XYCutPlusPlusSorter) sortWithColumnAwareness(objects []entities.IObject,
 			rightRegion := calculateBoundingRegion(right)
 			if rightRegion.Width <= 0 {
 				rightRegion = region
+			}
+
+			if len(neutral) == 0 {
+				if sidebar, sidebarRegion, main, mainRegion, ok := detectMarginalSidebarSplit(left, leftRegion, right, rightRegion, region); ok {
+					sortedMain := s.sortWithColumnAwareness(main, preferHorizontalFirst, mainRegion)
+					sortedSidebar := s.sortWithColumnAwareness(sidebar, preferHorizontalFirst, sidebarRegion)
+					return mergeDeferredFloatingElements(sortedMain, sortedSidebar)
+				}
 			}
 
 			sortedLeft := s.sortWithColumnAwareness(left, preferHorizontalFirst, leftRegion)
@@ -154,7 +187,7 @@ func (s XYCutPlusPlusSorter) sortWithColumnAwareness(objects []entities.IObject,
 			if len(neutral) == 0 {
 				return result
 			}
-			return mergeCrossLayoutElements(result, neutral)
+			return mergeDeferredFloatingElements(result, neutral)
 		}
 	}
 
@@ -590,6 +623,108 @@ func smallestCount(a, b int) int {
 	return b
 }
 
+func identifyMarginalFloatingElements(objects []entities.IObject, region entities.BoundingBox) []entities.IObject {
+	if len(objects) < sidebarMinMainCount+1 {
+		return nil
+	}
+
+	maxWidth := 0.0
+	for _, obj := range objects {
+		if width := obj.GetBBox().Width; width > maxWidth {
+			maxWidth = width
+		}
+	}
+	if maxWidth <= 0 {
+		return nil
+	}
+
+	threshold := maxWidth * sidebarMaxWidthRatio
+	floating := make([]entities.IObject, 0, len(objects))
+	for _, obj := range objects {
+		b := obj.GetBBox()
+		if b.Width > threshold || !regionTouchesHorizontalEdge(b, region, sidebarEdgeSlack) {
+			continue
+		}
+		if hasMinimumVerticalOverlaps(obj, objects, minOverlapCount) {
+			floating = append(floating, obj)
+		}
+	}
+	return floating
+}
+
+func detectMarginalSidebarSplit(
+	left []entities.IObject,
+	leftRegion entities.BoundingBox,
+	right []entities.IObject,
+	rightRegion entities.BoundingBox,
+	parentRegion entities.BoundingBox,
+) ([]entities.IObject, entities.BoundingBox, []entities.IObject, entities.BoundingBox, bool) {
+	if len(left) == 0 || len(right) == 0 {
+		return nil, entities.BoundingBox{}, nil, entities.BoundingBox{}, false
+	}
+
+	sidebar, sidebarRegion := left, leftRegion
+	main, mainRegion := right, rightRegion
+	if len(left) > len(right) {
+		sidebar, sidebarRegion = right, rightRegion
+		main, mainRegion = left, leftRegion
+	}
+
+	if len(main) < sidebarMinMainCount || len(sidebar) >= len(main) {
+		return nil, entities.BoundingBox{}, nil, entities.BoundingBox{}, false
+	}
+	if sidebarRegion.Width <= 0 || mainRegion.Width <= 0 {
+		return nil, entities.BoundingBox{}, nil, entities.BoundingBox{}, false
+	}
+	if sidebarRegion.Width > mainRegion.Width*sidebarMaxWidthRatio {
+		return nil, entities.BoundingBox{}, nil, entities.BoundingBox{}, false
+	}
+	if !regionTouchesHorizontalEdge(sidebarRegion, parentRegion, sidebarEdgeSlack) {
+		return nil, entities.BoundingBox{}, nil, entities.BoundingBox{}, false
+	}
+	if detectColumnSplit(sidebar, sidebarRegion.X, sidebarRegion.Width) >= 0 {
+		return nil, entities.BoundingBox{}, nil, entities.BoundingBox{}, false
+	}
+
+	return sidebar, sidebarRegion, main, mainRegion, true
+}
+
+func regionTouchesHorizontalEdge(region, parent entities.BoundingBox, slack float64) bool {
+	parentRight := parent.X + parent.Width
+	regionRight := region.X + region.Width
+	return region.X-parent.X <= slack || parentRight-regionRight <= slack
+}
+
+func hasMinimumVerticalOverlaps(element entities.IObject, objects []entities.IObject, minCount int) bool {
+	overlapCount := 0
+	for _, other := range objects {
+		if other == element {
+			continue
+		}
+		if calculateVerticalOverlapRatio(element.GetBBox(), other.GetBBox()) >= overlapThreshold {
+			overlapCount++
+			if overlapCount >= minCount {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func calculateVerticalOverlapRatio(a, b entities.BoundingBox) float64 {
+	bottom := max(a.Y, b.Y)
+	top := min(a.Y+a.Height, b.Y+b.Height)
+	overlap := top - bottom
+	if overlap <= 0 {
+		return 0
+	}
+	smaller := min(a.Height, b.Height)
+	if smaller <= 0 {
+		return 0
+	}
+	return overlap / smaller
+}
+
 func partitionByVerticalBand(objects []entities.IObject, overlapTop, overlapBottom float64) ([]entities.IObject, []entities.IObject, []entities.IObject) {
 	lead := make([]entities.IObject, 0, len(objects))
 	core := make([]entities.IObject, 0, len(objects))
@@ -639,6 +774,36 @@ func mergeCrossLayoutElements(sortedMain, crossLayout []entities.IObject) []enti
 				mainIndex++
 			}
 		}
+	}
+	return result
+}
+
+func mergeDeferredFloatingElements(sortedMain, floating []entities.IObject) []entities.IObject {
+	if len(floating) == 0 {
+		return sortedMain
+	}
+	if len(sortedMain) == 0 {
+		return sortByYThenX(floating)
+	}
+
+	sortedFloating := sortByYThenX(floating)
+	result := make([]entities.IObject, 0, len(sortedMain)+len(sortedFloating))
+	mainIndex, floatingIndex := 0, 0
+	for floatingIndex < len(sortedFloating) {
+		floatingBottom := sortedFloating[floatingIndex].GetBBox().Y
+		for mainIndex < len(sortedMain) {
+			mainTop := sortedMain[mainIndex].GetBBox().Y + sortedMain[mainIndex].GetBBox().Height
+			if mainTop < floatingBottom {
+				break
+			}
+			result = append(result, sortedMain[mainIndex])
+			mainIndex++
+		}
+		result = append(result, sortedFloating[floatingIndex])
+		floatingIndex++
+	}
+	if mainIndex < len(sortedMain) {
+		result = append(result, sortedMain[mainIndex:]...)
 	}
 	return result
 }
