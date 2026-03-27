@@ -23,6 +23,8 @@ const (
 	textLineDisplayTextRatio  = 0.02
 	textLineWordOverlapRatio  = 0.08
 	textLineDisplayFontMin    = 14.0
+	textLineGutterGapRatio    = 3.0
+	textLineNarrowWidthRatio  = 0.35
 	listLabelHeightEpsilon    = 1.5
 	lineArtBulletGapMax       = 20.0
 	lineArtBaselineTolerance  = 5.0
@@ -74,7 +76,8 @@ func groupTextChunksIntoLines(chunks []*entities.TextChunk, ctx *containers.Proc
 	for _, chunk := range sorted {
 		var target *entities.TextLine
 		for _, line := range lines {
-			if math.Abs(line.Baseline-chunk.Baseline) <= textLineBaselineTolerance {
+			if math.Abs(line.Baseline-chunk.Baseline) <= textLineBaselineTolerance &&
+				canMergeChunkIntoLine(line, chunk) {
 				target = line
 				break
 			}
@@ -92,6 +95,37 @@ func groupTextChunksIntoLines(chunks []*entities.TextChunk, ctx *containers.Proc
 	}
 
 	return lines
+}
+
+func canMergeChunkIntoLine(line *entities.TextLine, chunk *entities.TextChunk) bool {
+	if line == nil || chunk == nil || len(line.Chunks) == 0 {
+		return true
+	}
+
+	last := line.Chunks[len(line.Chunks)-1]
+	if last == nil {
+		return true
+	}
+
+	gap := chunk.BBox.X - (last.BBox.X + last.BBox.Width)
+	if gap <= 0 {
+		return true
+	}
+
+	height := math.Max(chunk.BBox.Height, line.BBox.Height)
+	if height <= 0 || gap <= height*textLineGutterGapRatio {
+		return true
+	}
+
+	lineWidth := line.BBox.Width
+	chunkWidth := chunk.BBox.Width
+	if lineWidth <= 0 || chunkWidth <= 0 {
+		return true
+	}
+
+	narrower := math.Min(lineWidth, chunkWidth)
+	wider := math.Max(lineWidth, chunkWidth)
+	return narrower/wider > textLineNarrowWidthRatio
 }
 
 func addSyntheticSpacing(chunks []*entities.TextChunk) []*entities.TextChunk {

@@ -169,6 +169,21 @@ func TestTextLineProcessorSuppressesIntrawordSpaceAfterSingleLowercaseFragment(t
 	assert.NotContains(t, lines[0].GetText(), "a ttention")
 }
 
+func TestTextLineProcessorKeepsNarrowInternalGutterChunkOutOfWideBodyLine(t *testing.T) {
+	processor := &processors.TextLineProcessor{}
+	ctx := containers.NewProcessorContext()
+	chunks := []*entities.TextChunk{
+		newTextChunk("contracers", 230.820, 100, 21.8182, 10.9091, 10.9091, 100),
+		newTextChunk("tiﬁed attention network (MORAN) for scene text", 308.862, 100, 258.9929, 10.9091, 10.9091, 100),
+	}
+
+	lines := processor.Process(chunks, nil, ctx)
+
+	assert.Len(t, lines, 2)
+	assert.Equal(t, "contracers", lines[0].GetText())
+	assert.Equal(t, "tiﬁed attention network (MORAN) for scene text", lines[1].GetText())
+}
+
 func newTextChunk(text string, x, y, width, height, fontSize, baseline float64) *entities.TextChunk {
 	return &entities.TextChunk{
 		BaseObject: entities.BaseObject{
