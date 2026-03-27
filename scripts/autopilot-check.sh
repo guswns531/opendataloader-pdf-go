@@ -47,6 +47,10 @@ fi
 if ! pgrep -f "codex exec --full-auto" >/dev/null 2>&1; then
   echo "[$STAMP] no active codex exec found; selecting next packet" >> "$LOG"
   for packet in \
+    harness/packets/codex-gap-ro-xycut-depth-stability.md \
+    harness/packets/codex-gap-ro-sidebar-mixed-layout.md \
+    harness/packets/codex-gap-ro-balanced-columns.md \
+    harness/packets/codex-gap-ro-two-column-basic.md \
     harness/packets/codex-gap-text-tounicode.md \
     harness/packets/codex-gap-text-winansi.md \
     harness/packets/codex-gap-text-trimspace.md \
