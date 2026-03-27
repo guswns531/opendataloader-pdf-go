@@ -98,6 +98,23 @@ func TestTextLineProcessorRestoresBenchmarkDenseWordJoins(t *testing.T) {
 	assert.Equal(t, "Growth and the Creation of Life", lines[0].GetText())
 }
 
+func TestTextLineProcessorRestoresBenchmarkDisplayHeadingSpacing(t *testing.T) {
+	processor := &processors.TextLineProcessor{}
+	ctx := containers.NewProcessorContext()
+	chunks := []*entities.TextChunk{
+		newTextChunk("Cellular", 10.00, 100, 36.0, 12, 18, 100),
+		newTextChunk("Cycle", 46.10, 100, 22.5, 12, 18, 100),
+		newTextChunk("and", 10.00, 82, 15.0, 12, 18, 82),
+		newTextChunk("Replication", 25.10, 82, 49.5, 12, 18, 82),
+	}
+
+	lines := processor.Process(chunks, nil, ctx)
+
+	assert.Len(t, lines, 2)
+	assert.Equal(t, "Cellular Cycle", lines[0].GetText())
+	assert.Equal(t, "and Replication", lines[1].GetText())
+}
+
 func TestTextLineProcessorRestoresBenchmarkDenseProseSpacing(t *testing.T) {
 	processor := &processors.TextLineProcessor{}
 	ctx := containers.NewProcessorContext()

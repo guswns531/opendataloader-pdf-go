@@ -20,7 +20,9 @@ const (
 	textLineTabRatio          = 2.0
 	textLineWordBoundaryRatio = 0.05
 	textLineDenseProseRatio   = 0.03
+	textLineDisplayTextRatio  = 0.02
 	textLineWordOverlapRatio  = 0.08
+	textLineDisplayFontMin    = 14.0
 	listLabelHeightEpsilon    = 1.5
 	lineArtBulletGapMax       = 20.0
 	lineArtBaselineTolerance  = 5.0
@@ -101,6 +103,7 @@ func addSyntheticSpacing(chunks []*entities.TextChunk) []*entities.TextChunk {
 	if avgCharWidth <= 0 {
 		avgCharWidth = textLineBaselineTolerance
 	}
+	avgFontSize := averageFontSize(chunks)
 	spaceThreshold := avgCharWidth * textLineSpaceRatio
 	tabThreshold := avgCharWidth * textLineTabRatio
 
@@ -113,7 +116,7 @@ func addSyntheticSpacing(chunks []*entities.TextChunk) []*entities.TextChunk {
 		currentStart := current.BBox.X
 		gap := currentStart - previousEnd
 		if shouldInsertSyntheticSpaceBeforeSingletonContinuation(chunks, i, previousEnd, avgCharWidth, spaceThreshold) ||
-			shouldInsertSyntheticSpace(previous, current, gap, avgCharWidth, spaceThreshold) {
+			shouldInsertSyntheticSpace(previous, current, gap, avgCharWidth, avgFontSize, spaceThreshold) {
 			spacingText := " "
 			if gap > tabThreshold {
 				spacingText = "\t"
@@ -172,7 +175,7 @@ func shouldInsertSyntheticSpaceBeforeSingletonContinuation(chunks []*entities.Te
 	return nextGap > spaceThreshold || looksLikeInlineWordBoundary(current, next)
 }
 
-func shouldInsertSyntheticSpace(previous, current *entities.TextChunk, gap, avgCharWidth, spaceThreshold float64) bool {
+func shouldInsertSyntheticSpace(previous, current *entities.TextChunk, gap, avgCharWidth, avgFontSize, spaceThreshold float64) bool {
 	if looksLikeHyphenatedContinuation(previous, current) {
 		return false
 	}
@@ -194,6 +197,9 @@ func shouldInsertSyntheticSpace(previous, current *entities.TextChunk, gap, avgC
 	boundaryRatio := textLineWordBoundaryRatio
 	if looksLikeDenseProseWordBoundary(previous, current) {
 		boundaryRatio = textLineDenseProseRatio
+	}
+	if looksLikeDisplayTextWordBoundary(previous, current, avgFontSize) {
+		boundaryRatio = math.Min(boundaryRatio, textLineDisplayTextRatio)
 	}
 	if gap <= avgCharWidth*boundaryRatio {
 		return false
@@ -231,6 +237,13 @@ func looksLikeDenseProseWordBoundary(previous, current *entities.TextChunk) bool
 	return trimmedRuneCount(previous) > 1 && trimmedRuneCount(current) > 1
 }
 
+func looksLikeDisplayTextWordBoundary(previous, current *entities.TextChunk, avgFontSize float64) bool {
+	if avgFontSize < textLineDisplayFontMin || !looksLikeInlineWordBoundary(previous, current) {
+		return false
+	}
+	return isAlphabeticDisplayWord(previous) && isAlphabeticDisplayWord(current)
+}
+
 func looksLikeLowercaseContinuationFragment(previous, current *entities.TextChunk) bool {
 	prevRune, ok := singleNonSpaceRune(previous)
 	if !ok || !unicode.IsLower(prevRune) {
@@ -250,6 +263,19 @@ func looksLikeHyphenatedContinuation(previous, current *entities.TextChunk) bool
 	}
 	currentRune, ok := singleNonSpaceRune(current)
 	return ok && unicode.IsLower(currentRune)
+}
+
+func isAlphabeticDisplayWord(chunk *entities.TextChunk) bool {
+	text := strings.TrimSpace(chunk.Text)
+	if trimmedRuneCountFromString(text) < 3 {
+		return false
+	}
+	for _, r := range text {
+		if !unicode.IsLetter(r) {
+			return false
+		}
+	}
+	return true
 }
 
 func lastNonSpaceRune(chunk *entities.TextChunk) (rune, bool) {
