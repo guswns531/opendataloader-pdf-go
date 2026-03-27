@@ -43,7 +43,19 @@ func TestDecodeTJTextDoesNotEmitDanglingOrDuplicateRecoveredSpaces(t *testing.T)
 
 func TestNormalizePDFStringDecodesWinAnsiAndLigature(t *testing.T) {
 	assert.Equal(t, "Euro: €", normalizePDFString([]byte("Euro: \x80")))
+	assert.Equal(t, "Quotes: ‘’ “”— œ £", normalizePDFString([]byte("Quotes: \x91\x92 \x93\x94\x97 \x9c \xa3")))
 	assert.Equal(t, "Rectified", normalizePDFString([]byte("Recti\x02ed")))
+}
+
+func TestFontDecoderWinAnsiTableDecodesExtendedBytes(t *testing.T) {
+	decoder := &fontDecoder{
+		hasFont:   true,
+		encoding:  winAnsiTable(),
+		toUnicode: nil,
+	}
+
+	assert.Equal(t, "Quotes: ‘’ “”— œ £", decoder.decode([]byte("Quotes: \x91\x92 \x93\x94\x97 \x9c \xa3")))
+	assert.Equal(t, "ASCII stays ASCII", decoder.decode([]byte("ASCII stays ASCII")))
 }
 
 func TestParseCMapContentDecodesBFCharAndBFRange(t *testing.T) {

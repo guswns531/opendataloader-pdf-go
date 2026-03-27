@@ -365,13 +365,25 @@ func macRomanTable() [256]rune {
 
 func winAnsiTable() [256]rune {
 	var table [256]rune
-	for i := 0; i < 256; i++ {
-		table[i] = rune(i)
+	decoded, err := charmap.Windows1252.NewDecoder().String(string(bytes0to255()))
+	if err != nil {
+		for i := 0; i < 256; i++ {
+			table[i] = winAnsiRune(byte(i))
+		}
+		return table
 	}
-	for b, r := range win1252Extras {
-		table[int(b)] = r
+	runes := []rune(decoded)
+	for i, r := range runes {
+		table[i] = r
 	}
 	return table
+}
+
+func winAnsiRune(b byte) rune {
+	if r, ok := win1252Extras[b]; ok {
+		return r
+	}
+	return rune(b)
 }
 
 func standardEncodingTable() [256]rune {
