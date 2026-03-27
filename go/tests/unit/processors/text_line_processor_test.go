@@ -80,6 +80,31 @@ func TestTextLineProcessorInsertsSpaceForSmallPositiveWordBoundaryGap(t *testing
 	assert.Equal(t, "In Proceedings", lines[0].GetText())
 }
 
+func TestTextLineProcessorSuppressesIntrawordSpaceAfterSingleLowercaseFragment(t *testing.T) {
+	processor := &processors.TextLineProcessor{}
+	ctx := containers.NewProcessorContext()
+	chunks := []*entities.TextChunk{
+		newTextChunk("we thus propose a", 50.112, 100, 94.855, 10, 12, 100),
+		newTextChunk("m", 145.835, 100, 5.455, 10, 12, 100),
+		newTextChunk("ulti-", 154.322, 100, 16.185, 10, 12, 100),
+		newTextChunk("o", 172.507, 100, 5.455, 10, 12, 100),
+		newTextChunk("bject", 177.962, 100, 27.273, 10, 12, 100),
+		newTextChunk("r", 205.495, 100, 2.243, 10, 12, 100),
+		newTextChunk("ectiﬁed", 209.738, 100, 35.832, 10, 12, 100),
+		newTextChunk("a", 247.570, 100, 3.454, 10, 12, 100),
+		newTextChunk("ttention", 253.024, 100, 43.636, 10, 12, 100),
+	}
+
+	lines := processor.Process(chunks, nil, ctx)
+
+	assert.Len(t, lines, 1)
+	assert.Equal(t, "we thus propose a multi-objectrectiﬁed attention", lines[0].GetText())
+	assert.NotContains(t, lines[0].GetText(), "m ulti-")
+	assert.NotContains(t, lines[0].GetText(), "multi- object")
+	assert.NotContains(t, lines[0].GetText(), "objectr ectiﬁed")
+	assert.NotContains(t, lines[0].GetText(), "a ttention")
+}
+
 func newTextChunk(text string, x, y, width, height, fontSize, baseline float64) *entities.TextChunk {
 	return &entities.TextChunk{
 		BaseObject: entities.BaseObject{

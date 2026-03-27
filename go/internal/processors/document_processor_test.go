@@ -119,3 +119,37 @@ func TestProcessJavaDocumentPreservesBibliographyBoundarySpaceInFixture(t *testi
 		t.Fatalf("unexpected joined bibliography boundary in output: %q", output)
 	}
 }
+
+func TestProcessJavaDocumentSuppressesIntrawordSyntheticSpacesInFixture(t *testing.T) {
+	pdf := filepath.Clean("../../../samples/pdf/1901.03003.pdf")
+	if _, err := os.Stat(pdf); err != nil {
+		t.Skip("fixture not available")
+	}
+	cfg := api.DefaultConfig()
+	cfg.Pages = "1"
+	cfg.ImageOutput = api.ImageOutputOff
+
+	ctx := containers.NewProcessorContext()
+	processor := NewDocumentProcessor()
+	doc, err := processor.loadDocument(pdf, cfg, ctx)
+	if err != nil {
+		t.Fatalf("loadDocument() error = %v", err)
+	}
+
+	processed, err := processor.processJavaDocument(doc, cfg, ctx)
+	if err != nil {
+		t.Fatalf("processJavaDocument() error = %v", err)
+	}
+
+	output, err := markdown.NewMarkdownGenerator(cfg, false, false).Generate(processed)
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	if !strings.Contains(output, "we thus propose a multi-objectrectiﬁed attention network") {
+		t.Fatalf("expected fixture output to suppress intra-word synthetic spaces, got %q", output)
+	}
+	if strings.Contains(output, "m ulti-") || strings.Contains(output, "multi- object") || strings.Contains(output, "objectr ectiﬁed") || strings.Contains(output, "a ttention") {
+		t.Fatalf("unexpected intra-word synthetic spacing in output: %q", output)
+	}
+}

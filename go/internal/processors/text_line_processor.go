@@ -140,6 +140,12 @@ func shouldInsertSyntheticSpace(previous, current *entities.TextChunk, gap, avgC
 	if gap <= 0 {
 		return false
 	}
+	if looksLikeHyphenatedContinuation(previous, current) {
+		return false
+	}
+	if looksLikeLowercaseContinuationFragment(previous, current) {
+		return false
+	}
 	if gap > spaceThreshold {
 		return true
 	}
@@ -159,6 +165,27 @@ func looksLikeInlineWordBoundary(previous, current *entities.TextChunk) bool {
 		return false
 	}
 	return isWordBoundaryRune(prevRune) && isWordBoundaryRune(nextRune)
+}
+
+func looksLikeLowercaseContinuationFragment(previous, current *entities.TextChunk) bool {
+	prevRune, ok := singleNonSpaceRune(previous)
+	if !ok || !unicode.IsLower(prevRune) {
+		return false
+	}
+	nextRune, ok := firstNonSpaceRune(current)
+	if !ok || !unicode.IsLower(nextRune) {
+		return false
+	}
+	return trimmedRuneCount(current) > 1
+}
+
+func looksLikeHyphenatedContinuation(previous, current *entities.TextChunk) bool {
+	prevRune, ok := lastNonSpaceRune(previous)
+	if !ok || prevRune != '-' {
+		return false
+	}
+	currentRune, ok := singleNonSpaceRune(current)
+	return ok && unicode.IsLower(currentRune)
 }
 
 func lastNonSpaceRune(chunk *entities.TextChunk) (rune, bool) {
@@ -189,6 +216,32 @@ func firstNonSpaceRune(chunk *entities.TextChunk) (rune, bool) {
 		return 0, false
 	}
 	return r, true
+}
+
+func singleNonSpaceRune(chunk *entities.TextChunk) (rune, bool) {
+	if chunk == nil {
+		return 0, false
+	}
+	text := strings.TrimSpace(chunk.Text)
+	if trimmedRuneCountFromString(text) != 1 {
+		return 0, false
+	}
+	r, _ := utf8.DecodeRuneInString(text)
+	if r == utf8.RuneError {
+		return 0, false
+	}
+	return r, true
+}
+
+func trimmedRuneCount(chunk *entities.TextChunk) int {
+	if chunk == nil {
+		return 0
+	}
+	return trimmedRuneCountFromString(strings.TrimSpace(chunk.Text))
+}
+
+func trimmedRuneCountFromString(text string) int {
+	return utf8.RuneCountInString(text)
 }
 
 func isWordBoundaryRune(r rune) bool {
