@@ -82,6 +82,48 @@ func TestXYCutKeepsBasicTwoColumnsGroupedWithModestGutter(t *testing.T) {
 	})
 }
 
+func TestXYCutBalancesImbalancedColumnStartAndEnd(t *testing.T) {
+	objects := []entities.IObject{
+		testTextChunk("right-lead", 120, 200, 40, 10),
+		testTextChunk("left-top", 20, 160, 40, 10),
+		testTextChunk("right-top", 120, 160, 40, 10),
+		testTextChunk("left-bottom", 20, 120, 40, 10),
+		testTextChunk("right-bottom", 120, 120, 40, 10),
+		testTextChunk("left-trail", 20, 80, 40, 10),
+	}
+
+	sorted := XYCutPlusPlusSorter{}.Sort(objects, 200, 260)
+
+	assertObjectTexts(t, sorted, []string{
+		"right-lead",
+		"left-top",
+		"left-bottom",
+		"right-top",
+		"right-bottom",
+		"left-trail",
+	})
+}
+
+func TestXYCutTreatsGutterSpanningBlocksAsNeutralDuringColumnMerge(t *testing.T) {
+	objects := []entities.IObject{
+		testTextChunk("center-heading", 70, 180, 60, 10),
+		testTextChunk("left-top", 20, 160, 40, 10),
+		testTextChunk("right-top", 120, 160, 40, 10),
+		testTextChunk("left-bottom", 20, 120, 40, 10),
+		testTextChunk("right-bottom", 120, 120, 40, 10),
+	}
+
+	sorted := XYCutPlusPlusSorter{}.Sort(objects, 200, 240)
+
+	assertObjectTexts(t, sorted, []string{
+		"center-heading",
+		"left-top",
+		"left-bottom",
+		"right-top",
+		"right-bottom",
+	})
+}
+
 func testTextChunk(id string, x, y, width, height float64) *entities.TextChunk {
 	return &entities.TextChunk{
 		BaseObject: entities.BaseObject{

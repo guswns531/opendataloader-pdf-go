@@ -132,17 +132,29 @@ func (s XYCutPlusPlusSorter) sortWithColumnAwareness(objects []entities.IObject,
 	}
 
 	if gapX := detectColumnSplit(objects, region.X, region.Width); gapX >= 0 {
-		groups := splitByVerticalCut(objects, gapX)
-		if len(groups) > 1 {
-			result := make([]entities.IObject, 0, len(objects))
-			for _, group := range groups {
-				groupRegion := calculateBoundingRegion(group)
-				if groupRegion.Width <= 0 {
-					groupRegion = region
-				}
-				result = append(result, s.sortWithColumnAwareness(group, preferHorizontalFirst, groupRegion)...)
+		left, right, neutral := splitByVerticalCutWithNeutral(objects, gapX)
+		if len(left) > 0 && len(right) > 0 {
+			leftRegion := calculateBoundingRegion(left)
+			if leftRegion.Width <= 0 {
+				leftRegion = region
 			}
-			return result
+			rightRegion := calculateBoundingRegion(right)
+			if rightRegion.Width <= 0 {
+				rightRegion = region
+			}
+
+			sortedLeft := s.sortWithColumnAwareness(left, preferHorizontalFirst, leftRegion)
+			sortedRight := s.sortWithColumnAwareness(right, preferHorizontalFirst, rightRegion)
+			result := append(cloneObjects(sortedLeft), sortedRight...)
+			if (len(neutral) > 0 || columnsAreImbalanced(left, right)) &&
+				detectColumnSplit(left, leftRegion.X, leftRegion.Width) < 0 &&
+				detectColumnSplit(right, rightRegion.X, rightRegion.Width) < 0 {
+				result = mergeBalancedColumns(sortedLeft, sortedRight)
+			}
+			if len(neutral) == 0 {
+				return result
+			}
+			return mergeCrossLayoutElements(result, neutral)
 		}
 	}
 
@@ -150,19 +162,51 @@ func (s XYCutPlusPlusSorter) sortWithColumnAwareness(objects []entities.IObject,
 }
 
 func detectColumnSplit(objects []entities.IObject, regionX, regionWidth float64) float64 {
-	if regionWidth <= 0 || len(objects) < columnMinObjectCount {
+	split := detectColumnSplitInfo(objects, regionX, regionWidth)
+
+	midpoint := regionX + regionWidth/2
+	filtered := make([]entities.IObject, 0, len(objects))
+	for _, obj := range objects {
+		b := obj.GetBBox()
+		leftSpan := midpoint - b.X
+		rightSpan := (b.X + b.Width) - midpoint
+		if leftSpan >= minGapThreshold && rightSpan >= minGapThreshold {
+			continue
+		}
+		filtered = append(filtered, obj)
+	}
+	if len(filtered) >= columnMinObjectCount && len(filtered) < len(objects) {
+		filteredSplit := detectColumnSplitInfo(filtered, regionX, regionWidth)
+		left, right, neutral := splitByVerticalCutWithNeutral(objects, filteredSplit.position)
+		if filteredSplit.gap > split.gap &&
+			len(left) > 0 &&
+			len(right) > 0 &&
+			len(neutral) > 0 &&
+			len(neutral) < smallestCount(len(left), len(right)) {
+			split = filteredSplit
+		}
+	}
+
+	if split.gap < minGapThreshold {
 		return -1
+	}
+	return split.position
+}
+
+func detectColumnSplitInfo(objects []entities.IObject, regionX, regionWidth float64) cutInfo {
+	if regionWidth <= 0 || len(objects) < columnMinObjectCount {
+		return cutInfo{position: -1}
 	}
 
 	minX := regionX + regionWidth*columnMinRegionRatio
 	maxX := regionX + regionWidth*columnMaxRegionRatio
 	if maxX <= minX {
-		return -1
+		return cutInfo{position: -1}
 	}
 
 	bucketWidth := (maxX - minX) / float64(columnHistogramBuckets)
 	if bucketWidth <= 0 {
-		return -1
+		return cutInfo{position: -1}
 	}
 
 	occupied := make([]bool, columnHistogramBuckets)
@@ -209,14 +253,10 @@ func detectColumnSplit(objects []entities.IObject, regionX, regionWidth float64)
 		currentStart, currentLen = -1, 0
 	}
 	if bestGapLen <= 0 {
-		return -1
+		return cutInfo{position: -1}
 	}
 
 	actualGapWidth := float64(bestGapLen) * bucketWidth
-	if actualGapWidth < minGapThreshold {
-		return -1
-	}
-
 	gapX := minX + float64(bestGapStart)*bucketWidth + actualGapWidth/2
 	leftCount, rightCount := 0, 0
 	for _, obj := range objects {
@@ -229,10 +269,10 @@ func detectColumnSplit(objects []entities.IObject, regionX, regionWidth float64)
 		}
 	}
 	if leftCount == 0 || rightCount == 0 {
-		return -1
+		return cutInfo{position: -1}
 	}
 
-	return gapX
+	return cutInfo{position: gapX, gap: actualGapWidth}
 }
 
 func identifyCrossLayoutElements(objects []entities.IObject, beta float64) []entities.IObject {
@@ -470,6 +510,103 @@ func splitByVerticalCut(objects []entities.IObject, cutX float64) [][]entities.I
 		groups = append(groups, right)
 	}
 	return groups
+}
+
+func splitByVerticalCutWithNeutral(objects []entities.IObject, cutX float64) ([]entities.IObject, []entities.IObject, []entities.IObject) {
+	var left, right, neutral []entities.IObject
+	for _, obj := range objects {
+		b := obj.GetBBox()
+		leftSpan := cutX - b.X
+		rightSpan := (b.X + b.Width) - cutX
+		if leftSpan >= minGapThreshold && rightSpan >= minGapThreshold {
+			neutral = append(neutral, obj)
+			continue
+		}
+
+		centerX := b.X + b.Width/2
+		if centerX < cutX {
+			left = append(left, obj)
+		} else {
+			right = append(right, obj)
+		}
+	}
+	return left, right, neutral
+}
+
+func mergeBalancedColumns(left, right []entities.IObject) []entities.IObject {
+	if len(left) == 0 {
+		return cloneObjects(right)
+	}
+	if len(right) == 0 {
+		return cloneObjects(left)
+	}
+
+	leftTop, leftBottom := verticalSpan(left)
+	rightTop, rightBottom := verticalSpan(right)
+	overlapTop := min(leftTop, rightTop)
+	overlapBottom := max(leftBottom, rightBottom)
+	if overlapTop <= overlapBottom {
+		result := cloneObjects(left)
+		return append(result, right...)
+	}
+
+	leftLead, leftCore, leftTrail := partitionByVerticalBand(left, overlapTop, overlapBottom)
+	rightLead, rightCore, rightTrail := partitionByVerticalBand(right, overlapTop, overlapBottom)
+
+	result := make([]entities.IObject, 0, len(left)+len(right))
+	if len(leftLead)+len(rightLead) > 0 {
+		result = append(result, sortByYThenX(append(cloneObjects(leftLead), rightLead...))...)
+	}
+	result = append(result, leftCore...)
+	result = append(result, rightCore...)
+	if len(leftTrail)+len(rightTrail) > 0 {
+		result = append(result, sortByYThenX(append(cloneObjects(leftTrail), rightTrail...))...)
+	}
+	return result
+}
+
+func verticalSpan(objects []entities.IObject) (top float64, bottom float64) {
+	first := objects[0].GetBBox()
+	top = first.Y + first.Height
+	bottom = first.Y
+	for _, obj := range objects[1:] {
+		b := obj.GetBBox()
+		top = max(top, b.Y+b.Height)
+		bottom = min(bottom, b.Y)
+	}
+	return top, bottom
+}
+
+func columnsAreImbalanced(left, right []entities.IObject) bool {
+	leftTop, leftBottom := verticalSpan(left)
+	rightTop, rightBottom := verticalSpan(right)
+	return math.Abs(leftTop-rightTop) >= minGapThreshold || math.Abs(leftBottom-rightBottom) >= minGapThreshold
+}
+
+func smallestCount(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func partitionByVerticalBand(objects []entities.IObject, overlapTop, overlapBottom float64) ([]entities.IObject, []entities.IObject, []entities.IObject) {
+	lead := make([]entities.IObject, 0, len(objects))
+	core := make([]entities.IObject, 0, len(objects))
+	trail := make([]entities.IObject, 0, len(objects))
+	for _, obj := range objects {
+		b := obj.GetBBox()
+		centerY := b.Y + b.Height/2
+		switch {
+		case centerY > overlapTop:
+			lead = append(lead, obj)
+		case centerY < overlapBottom:
+			trail = append(trail, obj)
+		default:
+			core = append(core, obj)
+		}
+	}
+	return lead, core, trail
 }
 
 func mergeCrossLayoutElements(sortedMain, crossLayout []entities.IObject) []entities.IObject {
