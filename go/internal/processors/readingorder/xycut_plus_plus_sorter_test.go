@@ -234,6 +234,50 @@ func TestXYCutKeepsRightColumnImageGridGroupedAfterLeftTrailBlock(t *testing.T) 
 	}
 }
 
+func TestXYCutKeepsWideAbstractLeadBeforeLeftThenRightColumns(t *testing.T) {
+	objects := []entities.IObject{
+		testTextChunk("3546", 53.397, 578.242, 548.898, 21.550),
+		testTextChunk("3548", 54.000, 566.742, 266.893, 8.820),
+		testTextChunk("3531", 53.676, 555.243, 274.452, 8.820),
+		testTextChunk("3550", 54.000, 543.743, 284.807, 8.820),
+		testTextChunk("3532", 53.676, 532.243, 257.809, 8.820),
+		testTextChunk("3533", 54.000, 520.743, 261.978, 8.874),
+		testTextChunk("3534", 54.000, 509.243, 249.853, 8.820),
+		testTextChunk("3554", 54.000, 497.743, 263.264, 9.180),
+		testTextChunk("3535", 53.676, 486.243, 261.883, 8.820),
+		testTextChunk("3536", 54.000, 474.743, 265.822, 8.928),
+		testTextChunk("3557", 54.000, 463.243, 262.586, 8.973),
+		testTextChunk("3538", 53.676, 451.743, 272.178, 8.955),
+		testTextChunk("3539", 54.000, 440.243, 253.584, 8.820),
+		testTextChunk("3540", 54.000, 428.743, 263.612, 8.820),
+		testTextChunk("3541", 54.000, 417.243, 256.269, 9.180),
+		testTextChunk("3542", 54.000, 405.744, 238.138, 9.180),
+		testTextChunk("3543", 54.000, 394.244, 270.599, 9.180),
+		testTextChunk("3547", 315.000, 567.342, 271.342, 9.800),
+		testTextChunk("3549", 315.000, 544.942, 289.231, 21.400),
+		testTextChunk("3551", 314.640, 533.742, 293.304, 9.800),
+		testTextChunk("3552", 315.000, 522.542, 282.682, 10.120),
+		testTextChunk("3553", 315.000, 500.142, 293.686, 21.400),
+		testTextChunk("3555", 315.000, 488.942, 281.962, 9.900),
+		testTextChunk("3556", 315.000, 477.742, 110.500, 10.000),
+		testTextChunk("3537", 315.000, 460.817, 256.980, 10.130),
+		testTextChunk("3558", 315.000, 449.617, 292.848, 10.130),
+		testTextChunk("3559", 315.000, 438.417, 281.306, 10.200),
+		testTextChunk("3560", 315.000, 427.217, 286.866, 9.800),
+		testTextChunk("3561", 315.000, 416.017, 279.720, 10.080),
+		testTextChunk("3562", 315.000, 404.817, 281.377, 10.200),
+		testTextChunk("3563", 315.000, 393.617, 283.815, 10.200),
+	}
+
+	sorted := XYCutPlusPlusSorter{}.Sort(objects, 612, 792)
+
+	assertObjectTexts(t, sorted, []string{
+		"3546",
+		"3548", "3531", "3550", "3532", "3533", "3534", "3554", "3535", "3536", "3557", "3538", "3539", "3540", "3541", "3542", "3543",
+		"3547", "3549", "3551", "3552", "3553", "3555", "3556", "3537", "3558", "3559", "3560", "3561", "3562", "3563",
+	})
+}
+
 func testTextChunk(id string, x, y, width, height float64) *entities.TextChunk {
 	return &entities.TextChunk{
 		BaseObject: entities.BaseObject{

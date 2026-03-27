@@ -31,6 +31,8 @@ const (
 	sidebarMinMainCount     = 3
 	stackedEdgeColumnCount  = 3
 	stackedEdgeGapSlack     = 12.0
+	softColumnWideRatio     = 0.75
+	softColumnGapRatio      = 0.12
 )
 
 type XYCutPlusPlusSorter struct {
@@ -203,6 +205,22 @@ func (s XYCutPlusPlusSorter) sortWithColumnAwareness(objects []entities.IObject,
 			}
 			return mergeDeferredFloatingElements(result, neutral)
 		}
+	}
+
+	if left, right, neutral, ok := detectSoftColumnSplit(objects, region); ok {
+		leftRegion := calculateBoundingRegion(left)
+		if leftRegion.Width <= 0 {
+			leftRegion = region
+		}
+		rightRegion := calculateBoundingRegion(right)
+		if rightRegion.Width <= 0 {
+			rightRegion = region
+		}
+
+		sortedLeft := s.sortWithColumnAwareness(left, preferHorizontalFirst, leftRegion)
+		sortedRight := s.sortWithColumnAwareness(right, preferHorizontalFirst, rightRegion)
+		result := mergeBalancedColumns(sortedLeft, sortedRight)
+		return mergeDeferredFloatingElements(result, neutral)
 	}
 
 	return s.recursiveSegment(objects, preferHorizontalFirst, region.X, region.Width, region.Height)
@@ -756,6 +774,78 @@ func partitionByVerticalBand(objects []entities.IObject, overlapTop, overlapBott
 		}
 	}
 	return lead, core, trail
+}
+
+func detectSoftColumnSplit(objects []entities.IObject, region entities.BoundingBox) ([]entities.IObject, []entities.IObject, []entities.IObject, bool) {
+	if len(objects) < columnMinObjectCount+1 || region.Width <= 0 {
+		return nil, nil, nil, false
+	}
+
+	neutral := make([]entities.IObject, 0, len(objects))
+	remaining := make([]entities.IObject, 0, len(objects))
+	centerMin := region.X + region.Width*columnMinRegionRatio
+	centerMax := region.X + region.Width*columnMaxRegionRatio
+	wideThreshold := region.Width * softColumnWideRatio
+	for _, obj := range objects {
+		b := obj.GetBBox()
+		centerX := b.X + b.Width/2
+		if b.Width >= wideThreshold && centerX > centerMin && centerX < centerMax {
+			neutral = append(neutral, obj)
+			continue
+		}
+		remaining = append(remaining, obj)
+	}
+	if len(neutral) == 0 || len(remaining) < columnMinObjectCount*2 {
+		return nil, nil, nil, false
+	}
+
+	sorted := cloneObjects(remaining)
+	sort.Slice(sorted, func(i, j int) bool {
+		a := sorted[i].GetBBox()
+		b := sorted[j].GetBBox()
+		ac := a.X + a.Width/2
+		bc := b.X + b.Width/2
+		if ac == bc {
+			return a.X < b.X
+		}
+		return ac < bc
+	})
+
+	minCenterGap := max(minGapThreshold*3, region.Width*softColumnGapRatio)
+	bestGap := 0.0
+	bestCut := -1.0
+	for idx := 1; idx < len(sorted); idx++ {
+		leftBBox := sorted[idx-1].GetBBox()
+		rightBBox := sorted[idx].GetBBox()
+		leftCenter := leftBBox.X + leftBBox.Width/2
+		rightCenter := rightBBox.X + rightBBox.Width/2
+		gap := rightCenter - leftCenter
+		cut := leftCenter + gap/2
+		if gap > bestGap && gap >= minCenterGap && cut > centerMin && cut < centerMax {
+			bestGap = gap
+			bestCut = cut
+		}
+	}
+	if bestCut < 0 {
+		return nil, nil, nil, false
+	}
+
+	groups := splitByVerticalCut(remaining, bestCut)
+	if len(groups) != 2 {
+		return nil, nil, nil, false
+	}
+	left, right := groups[0], groups[1]
+	if len(left) < columnMinObjectCount || len(right) < columnMinObjectCount {
+		return nil, nil, nil, false
+	}
+
+	leftTop, leftBottom := verticalSpan(left)
+	rightTop, rightBottom := verticalSpan(right)
+	if min(leftTop, rightTop) <= max(leftBottom, rightBottom) {
+		return nil, nil, nil, false
+	}
+
+	return left, right, neutral, true
 }
 
 func mergeCrossLayoutElements(sortedMain, crossLayout []entities.IObject) []entities.IObject {
