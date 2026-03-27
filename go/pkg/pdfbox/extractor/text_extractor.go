@@ -61,7 +61,8 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 	var operands []streamToken
 	var out []*ExtractedText
 
-	appendText := func(text string) {
+	var appendTextToken func(string, []byte, *float64)
+	appendTextToken = func(text string, raw []byte, advanceOverride *float64) {
 		text = normalizeExtractedText(text)
 		if text == "" || !ts.inText {
 			return
@@ -78,14 +79,27 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 		if effectiveSize <= 0 {
 			effectiveSize = ts.fontSize
 		}
+		advance := fallbackTextAdvance(text, ts.fontSize)
+		if advanceOverride != nil {
+			advance = *advanceOverride
+		} else if decoder := fontDecoders[ts.fontName]; decoder != nil {
+			advance = decoder.textAdvance(raw, text, ts.fontSize, ts.charSpacing, ts.wordSpacing)
+		}
 		if strings.TrimSpace(text) == "" {
 			if last := lastExtractedTextOnBaseline(out, pageIdx, y); last != nil {
 				appendBoundaryWhitespace(last, text)
 			}
-			ts.textMatrix = ts.textMatrix.translate(float64(len([]rune(text)))*ts.fontSize*0.5, 0)
+			ts.textMatrix = ts.textMatrix.translate(advance, 0)
 			return
 		}
-		width := textWidthEstimate(text, effectiveSize)
+		horizontalScale := math.Sqrt(ts.textMatrix.A*ts.textMatrix.A + ts.textMatrix.B*ts.textMatrix.B)
+		if horizontalScale <= 0 {
+			horizontalScale = 1
+		}
+		width := advance * horizontalScale
+		if last := lastExtractedTextOnBaseline(out, pageIdx, y); last != nil {
+			clampExtractedChunkWidth(last, x)
+		}
 		out = append(out, &ExtractedText{
 			Text:     text,
 			X:        x,
@@ -100,8 +114,11 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 			Baseline: y,
 			Page:     pageIdx,
 		})
-		// Advance text position. Most PDFs reset position via Tm/Td, so rough estimate is fine.
-		ts.textMatrix = ts.textMatrix.translate(float64(len([]rune(text)))*ts.fontSize*0.5, 0)
+		ts.textMatrix = ts.textMatrix.translate(advance, 0)
+	}
+
+	appendText := func(text string) {
+		appendTextToken(text, nil, nil)
 	}
 
 	for _, tok := range tokens {
@@ -193,17 +210,23 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 			}
 		case "Tj":
 			if len(operands) == 1 && (operands[0].kind == "string" || operands[0].kind == "hex") {
-				appendText(decodeTextToken(operands[0], fontDecoders[ts.fontName]))
+				appendTextToken(decodeTextToken(operands[0], fontDecoders[ts.fontName]), operands[0].raw, nil)
 			}
 		case "TJ":
 			if len(operands) == 1 && operands[0].kind == "array" {
-				appendText(decodeTJTextWithFont(operands[0], fontDecoders[ts.fontName]))
+				text := decodeTJTextWithFont(operands[0], fontDecoders[ts.fontName])
+				if decoder := fontDecoders[ts.fontName]; decoder != nil {
+					advance := decoder.tjTextAdvance(operands[0], ts.fontSize, ts.charSpacing, ts.wordSpacing)
+					appendTextToken(text, nil, &advance)
+					break
+				}
+				appendText(text)
 			}
 		case "'":
 			ts.lineMatrix = ts.lineMatrix.translate(0, -ts.leading)
 			ts.textMatrix = ts.lineMatrix
 			if len(operands) == 1 && (operands[0].kind == "string" || operands[0].kind == "hex") {
-				appendText(decodeTextToken(operands[0], fontDecoders[ts.fontName]))
+				appendTextToken(decodeTextToken(operands[0], fontDecoders[ts.fontName]), operands[0].raw, nil)
 			}
 		case "\"":
 			ts.lineMatrix = ts.lineMatrix.translate(0, -ts.leading)
@@ -211,7 +234,7 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 			if len(operands) >= 1 {
 				last := operands[len(operands)-1]
 				if last.kind == "string" || last.kind == "hex" {
-					appendText(decodeTextToken(last, fontDecoders[ts.fontName]))
+					appendTextToken(decodeTextToken(last, fontDecoders[ts.fontName]), last.raw, nil)
 				}
 			}
 		default:
@@ -227,6 +250,22 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 		return nil, fmt.Errorf("invalid page index")
 	}
 	return out, nil
+}
+
+func clampExtractedChunkWidth(prev *ExtractedText, nextX float64) {
+	if prev == nil || nextX <= prev.X {
+		return
+	}
+	endX := prev.X + prev.Width
+	if endX <= nextX {
+		return
+	}
+	boundaryEpsilon := math.Min(prev.Height*0.2, 2.0)
+	width := nextX - prev.X - boundaryEpsilon
+	if width < 0 {
+		width = 0
+	}
+	prev.Width = width
 }
 
 func lastExtractedTextOnBaseline(out []*ExtractedText, pageIdx int, baseline float64) *ExtractedText {

@@ -206,14 +206,34 @@ func TestExtractTextChunksRecoversSpaceFromTJOffsets(t *testing.T) {
 	assert.Equal(t, "A Multi-Object Rectified Attention Network", chunks[0].Text)
 }
 
+func TestExtractTextChunksUsesDeclaredFontWidthsForGeometry(t *testing.T) {
+	pdf := writeTextPDFWithFont(t,
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /FirstChar 65 /LastChar 66 /Widths [100 100] >>",
+		"BT /F1 12 Tf 72 400 Td (AB) Tj ET\n",
+	)
+	doc, err := model.Open(pdf, "")
+	require.NoError(t, err)
+	defer doc.Close()
+
+	chunks, err := ExtractTextChunks(doc, 0)
+	require.NoError(t, err)
+	require.Len(t, chunks, 1)
+	assert.InDelta(t, 2.4, chunks[0].Width, 0.01)
+}
+
 func writeTextPDF(t *testing.T, content string) string {
+	t.Helper()
+	return writeTextPDFWithFont(t, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", content)
+}
+
+func writeTextPDFWithFont(t *testing.T, fontDict, content string) string {
 	t.Helper()
 
 	objects := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		fontDict,
 		fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", len(content), content),
 	}
 

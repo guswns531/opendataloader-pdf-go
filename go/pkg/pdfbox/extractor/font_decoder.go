@@ -20,6 +20,9 @@ type fontDecoder struct {
 	codeLens  []int
 	encoding  [256]rune
 	hasFont   bool
+	widths    map[uint32]float64
+	isCIDFont bool
+	dw        float64
 }
 
 func loadPageFontDecoders(doc *model.PDDocument, pageIdx int) (map[string]*fontDecoder, error) {
@@ -61,13 +64,211 @@ func loadFontDecoder(ctx *pdfmodel.Context, obj types.Object) (*fontDecoder, err
 	if err != nil {
 		return nil, err
 	}
-	decoder := &fontDecoder{hasFont: true, encoding: standardEncodingTable()}
+	decoder := &fontDecoder{
+		hasFont:  true,
+		encoding: standardEncodingTable(),
+		dw:       500,
+	}
 	if cmap, codeLens, err := parseToUnicodeCMap(ctx, fontDict); err == nil && len(cmap) > 0 {
 		decoder.toUnicode = cmap
 		decoder.codeLens = codeLens
 	}
 	decoder.encoding = resolveFontEncoding(ctx, fontDict)
+	decoder.loadWidths(ctx, fontDict)
 	return decoder, nil
+}
+
+func (d *fontDecoder) loadWidths(ctx *pdfmodel.Context, fontDict types.Dict) {
+	if d == nil {
+		return
+	}
+	if descendantFonts := fontDict.ArrayEntry("DescendantFonts"); len(descendantFonts) > 0 {
+		descendant, err := ctx.DereferenceDict(descendantFonts[0])
+		if err == nil && descendant != nil {
+			d.loadCIDWidths(descendant)
+		}
+		return
+	}
+	d.loadSimpleWidths(fontDict)
+}
+
+func (d *fontDecoder) loadSimpleWidths(fontDict types.Dict) {
+	if d == nil || fontDict == nil {
+		return
+	}
+	firstChar := fontDict.IntEntry("FirstChar")
+	widths := fontDict.ArrayEntry("Widths")
+	if firstChar == nil || len(widths) == 0 {
+		if descriptor := fontDict.DictEntry("FontDescriptor"); descriptor != nil {
+			if missing := descriptor.IntEntry("MissingWidth"); missing != nil {
+				d.dw = float64(*missing)
+			}
+		}
+		return
+	}
+	d.widths = map[uint32]float64{}
+	for i, obj := range widths {
+		switch v := obj.(type) {
+		case types.Integer:
+			d.widths[uint32(*firstChar+i)] = float64(v)
+		case types.Float:
+			d.widths[uint32(*firstChar+i)] = float64(v)
+		}
+	}
+	if descriptor := fontDict.DictEntry("FontDescriptor"); descriptor != nil {
+		if missing := descriptor.IntEntry("MissingWidth"); missing != nil {
+			d.dw = float64(*missing)
+		}
+	}
+}
+
+func (d *fontDecoder) loadCIDWidths(fontDict types.Dict) {
+	if d == nil || fontDict == nil {
+		return
+	}
+	d.isCIDFont = true
+	d.dw = 1000
+	if dw := fontDict.IntEntry("DW"); dw != nil {
+		d.dw = float64(*dw)
+	}
+	widths := fontDict.ArrayEntry("W")
+	if len(widths) == 0 {
+		return
+	}
+	d.widths = map[uint32]float64{}
+	for i := 0; i < len(widths); {
+		start, ok := numericObject(widths[i])
+		if !ok || i+1 >= len(widths) {
+			break
+		}
+		switch v := widths[i+1].(type) {
+		case types.Array:
+			for offset, item := range v {
+				if width, ok := numericObject(item); ok {
+					d.widths[uint32(start+float64(offset))] = width
+				}
+			}
+			i += 2
+		default:
+			if i+2 >= len(widths) {
+				return
+			}
+			end, okEnd := numericObject(widths[i+1])
+			width, okWidth := numericObject(widths[i+2])
+			if !okEnd || !okWidth {
+				return
+			}
+			for cid := uint32(start); cid <= uint32(end); cid++ {
+				d.widths[cid] = width
+			}
+			i += 3
+		}
+	}
+}
+
+func numericObject(obj types.Object) (float64, bool) {
+	switch v := obj.(type) {
+	case types.Integer:
+		return float64(v), true
+	case types.Float:
+		return float64(v), true
+	default:
+		return 0, false
+	}
+}
+
+func (d *fontDecoder) textAdvance(raw []byte, decoded string, fontSize, charSpacing, wordSpacing float64) float64 {
+	if fontSize <= 0 {
+		return 0
+	}
+	codes := d.glyphCodes(raw)
+	if len(codes) == 0 {
+		return fallbackTextAdvance(decoded, fontSize)
+	}
+	advance := 0.0
+	for _, code := range codes {
+		width := d.dw
+		if d != nil && d.widths != nil {
+			if w, ok := d.widths[code]; ok {
+				width = w
+			}
+		}
+		advance += (width / 1000.0) * fontSize
+		advance += charSpacing
+		if code == 32 {
+			advance += wordSpacing
+		}
+	}
+	return advance
+}
+
+func (d *fontDecoder) tjTextAdvance(tok streamToken, fontSize, charSpacing, wordSpacing float64) float64 {
+	if tok.kind != "array" {
+		return 0
+	}
+	advance := 0.0
+	for _, item := range tok.items {
+		switch item.kind {
+		case "string", "hex":
+			advance += d.textAdvance(item.raw, decodeTextToken(item, d), fontSize, charSpacing, wordSpacing)
+		case "number":
+			if v, ok := parseFloatToken(item); ok {
+				advance += (-v / 1000.0) * fontSize
+			}
+		}
+	}
+	return advance
+}
+
+func fallbackTextAdvance(text string, fontSize float64) float64 {
+	if text == "" || fontSize <= 0 {
+		return 0
+	}
+	return float64(len([]rune(text))) * fontSize * 0.5
+}
+
+func (d *fontDecoder) glyphCodes(raw []byte) []uint32 {
+	if len(raw) == 0 {
+		return nil
+	}
+	codeLens := d.codeLens
+	if len(codeLens) == 0 && d != nil && d.isCIDFont {
+		codeLens = []int{2}
+	}
+	codes := make([]uint32, 0, len(raw))
+	for i := 0; i < len(raw); {
+		matched := false
+		for _, codeLen := range codeLens {
+			if codeLen <= 0 || i+codeLen > len(raw) {
+				continue
+			}
+			code := cmapCode(raw[i : i+codeLen])
+			if d == nil || len(d.widths) == 0 {
+				codes = append(codes, code)
+				i += codeLen
+				matched = true
+				break
+			}
+			if _, ok := d.widths[code]; ok {
+				codes = append(codes, code)
+				i += codeLen
+				matched = true
+				break
+			}
+			if _, ok := d.toUnicode[code]; ok {
+				codes = append(codes, code)
+				i += codeLen
+				matched = true
+				break
+			}
+		}
+		if matched {
+			continue
+		}
+		codes = append(codes, uint32(raw[i]))
+		i++
+	}
+	return codes
 }
 
 func (d *fontDecoder) decode(raw []byte) string {

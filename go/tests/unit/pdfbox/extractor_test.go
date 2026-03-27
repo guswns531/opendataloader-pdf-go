@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/pkg/pdfbox/extractor"
@@ -89,6 +91,41 @@ func TestGetPageUsesZeroBasedNumber(t *testing.T) {
 	page, err := doc.GetPage(0)
 	require.NoError(t, err)
 	assert.Equal(t, 0, page.Number)
+}
+
+func TestExtractTextChunksAvoidFalseOverlapForSurveyIEEEFixture(t *testing.T) {
+	pdf := filepath.Clean("../../../samples/pdf/1901.03003.pdf")
+	if _, err := os.Stat(pdf); err != nil {
+		t.Skip("fixture not available")
+	}
+
+	doc, err := model.Open(pdf, "")
+	require.NoError(t, err)
+	defer doc.Close()
+
+	chunks, err := extractor.ExtractTextChunks(doc, 15)
+	require.NoError(t, err)
+
+	surveyIdx := findChunkIndex(chunks, "tion in imagery: A survey.")
+	ieeeIdx := findChunkIndex(chunks, "IEEE Trans. Pattern Anal.")
+	require.NotEqual(t, -1, surveyIdx)
+	require.NotEqual(t, -1, ieeeIdx)
+	require.Equal(t, surveyIdx+1, ieeeIdx)
+
+	surveyChunk := chunks[surveyIdx]
+	ieeeChunk := chunks[ieeeIdx]
+	gap := ieeeChunk.X - (surveyChunk.X + surveyChunk.Width)
+	t.Logf("survey width=%.3f next x=%.3f gap=%.3f", surveyChunk.Width, ieeeChunk.X, gap)
+	assert.True(t, gap > 0 || math.Abs(gap) <= 0.5, "expected no material false overlap, got gap %.3f", gap)
+}
+
+func findChunkIndex(chunks []*extractor.ExtractedText, needle string) int {
+	for i, chunk := range chunks {
+		if chunk != nil && strings.Contains(chunk.Text, needle) {
+			return i
+		}
+	}
+	return -1
 }
 
 func writeLineArtPDF(t *testing.T) string {
