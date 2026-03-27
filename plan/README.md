@@ -110,22 +110,22 @@ veraPDF 소스 기반 포팅 시 **MPL-2.0 동일 라이센스** 적용.
 
 ### T16 family — Text extraction parity
 
-- `GAP-TEXT-TOUNICODE`
+- `GAP-TEXT-TOUNICODE` ✅ drafted in `plan/gaps/`
 - `GAP-TEXT-TJ-OFFSET` ✅ drafted in `plan/gaps/`
 - `GAP-TEXT-TRIMSPACE` ✅ drafted in `plan/gaps/`
 - `GAP-TEXT-WINANSI` ✅ drafted in `plan/gaps/`
-- `EVAL-TEXT-PARITY-CORE`
+- `EVAL-TEXT-PARITY-CORE` ✅ drafted in `plan/gaps/`
 
 ### T17 family — Reading order parity
 
 - `GAP-RO-TWO-COLUMN-BASIC` ✅ drafted in `plan/gaps/`
-- `GAP-RO-BALANCED-COLUMNS`
-- `GAP-RO-SIDEBAR-MIXED-LAYOUT`
+- `GAP-RO-BALANCED-COLUMNS` ✅ drafted in `plan/gaps/`
+- `GAP-RO-SIDEBAR-MIXED-LAYOUT` ✅ drafted in `plan/gaps/`
 - `GAP-RO-XYCUT-DEPTH-STABILITY` ✅ drafted in `plan/gaps/`
-- `EVAL-READING-ORDER-PARITY`
+- `EVAL-READING-ORDER-PARITY` ✅ drafted in `plan/gaps/`
 
 이 구조는 기존 milestone 문서를 대체하는 것이 아니라, 실제 실행을 더 잘게 쪼개기 위한 운영 단위다.
-또한 Codex 실행용 표준 패킷 템플릿은 `harness/prompts/` 아래에 둔다.
+또한 Codex 실행용 표준 패킷 템플릿은 `harness/prompts/` 아래에 두고, 실제 실행용 구체 패킷은 `harness/packets/` 아래에 둔다.
 
 ---
 
