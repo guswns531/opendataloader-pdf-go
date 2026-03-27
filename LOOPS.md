@@ -93,6 +93,8 @@ Evaluator outputs:
 6. **If the task grows, split it immediately**
 7. **Fresh context beats long chat history**
 8. **Prefer fixture and golden diff checks before full benchmark runs**
+9. **If no human is available, keep looping on the next best parity gap**
+10. **No idle waiting when a credible next gap exists**
 
 ---
 
@@ -172,6 +174,62 @@ If accepted, update:
 - known caveats
 - loop report
 
+### 7. Continue
+
+If no human response is required, immediately continue to the next best gap.
+
+---
+
+## Gap Discovery Rules
+
+Create a new gap when one of these happens:
+
+1. Java and Go outputs diverge on a reproducible fixture
+2. benchmark prediction repeatedly differs from ground truth in a recognizable pattern
+3. Codex identifies residual mismatch that does not fit the current gap cleanly
+4. a patch is rejected because it bundles multiple root causes
+5. a stale milestone task still hides multiple narrower parity problems
+
+Prefer gap names that express the actual failure mode, not vague buckets.
+
+Good:
+
+- `GAP-TEXT-LEADING-BOUNDARY-WHITESPACE`
+- `GAP-RO-COLUMN-SPLIT-DETECTION`
+- `GAP-TEXT-TOUNICODE-LIGATURE-MAP`
+
+Bad:
+
+- `GAP-MISC-FIXES`
+- `GAP-CLEANUP`
+- `GAP-T17-RETRY`
+
+---
+
+## Split / Discard / Escalate Rules
+
+### SPLIT when
+
+- one task actually contains multiple separable gaps
+- implementation uncertainty remains high
+- distinct causes are entangled (for example encoding + spacing + layout)
+- Codex starts touching multiple subsystems
+- acceptance criteria become ambiguous
+
+### DISCARD when
+
+- tests still fail
+- parity did not improve
+- behavior improved in one fixture but regressed elsewhere without justification
+- patch is overly ad hoc and cannot be defended against the Java reference
+
+### ESCALATE / NEEDS-HUMAN-REVIEW when
+
+- Java behavior itself is ambiguous
+- multiple trade-offs are plausible and not purely parity-driven
+- risky/destructive actions or external side effects are required
+- infrastructure prevents trustworthy evaluation
+
 ---
 
 ## Evaluation Ladder
@@ -226,7 +284,7 @@ Use sparingly:
 
 ### KEEP when
 
-- failing fixture now matches Java behavior
+- failing fixture now matches Java behavior or clearly moves closer
 - targeted tests pass
 - benchmark subset improves or holds
 - no meaningful regression is introduced
@@ -239,11 +297,10 @@ Use sparingly:
 - behavior improved in one fixture but regressed elsewhere without justification
 - patch is overly ad hoc and cannot be defended against the Java reference
 
-### SPLIT when
+### Practical rule
 
-- one task actually contains multiple separable gaps
-- implementation uncertainty remains high
-- distinct causes are entangled (for example encoding + spacing + layout)
+A candidate should not be accepted just because code changed.
+A candidate should be accepted because **measurable parity improved**.
 
 ---
 
@@ -259,6 +316,18 @@ When preparing Codex tasks:
 - do not rely on Codex remembering prior loops
 
 A good Codex packet should be understandable even if the agent has never seen the repo before.
+
+---
+
+## Validation Responsibility
+
+If Codex cannot reliably run validation because of sandbox or network restrictions:
+
+- let Codex produce the smallest plausible patch and focused tests
+- run validation from the outer OpenClaw execution environment
+- use the outer validation result for the real KEEP / DISCARD decision
+
+This repo should treat **trustworthy evaluation** as more important than where the command ran.
 
 ---
 
@@ -279,6 +348,10 @@ Suggested commit style:
 
 Avoid committing generated or binary artifacts by accident.
 
+Default rule:
+
+> KEEP → commit → push
+
 ---
 
 ## Suggested OpenClaw Workflow
@@ -296,6 +369,44 @@ If those answers are unclear, the task is not ready for Codex yet.
 
 ---
 
+## Loop Reports
+
+Meaningful loops should leave a concise report under `reports/loops/`.
+
+A report should capture:
+
+- gap ID
+- decision (KEEP / DISCARD / SPLIT / NEEDS-HUMAN-REVIEW)
+- evidence before
+- files changed
+- validation result
+- remaining uncertainty
+- follow-up recommendation
+- commit hash if kept
+
+This keeps the system auditable without rereading raw chat logs.
+
+---
+
+## Completion / Closure Rules
+
+A gap family like `T16` or `T17` is only considered substantially complete when:
+
+1. all drafted child gaps are resolved, split, or explicitly waived
+2. no high-signal fixture or benchmark evidence still points to that family as a major unresolved source of mismatch
+3. recent evaluator results do not keep rediscovering the same root cause
+
+This allows milestone states like:
+
+- pending
+- active
+- mostly-covered
+- validated
+
+without pretending every conceivable edge case is solved.
+
+---
+
 ## What Not To Do
 
 Avoid these anti-patterns:
@@ -306,6 +417,7 @@ Avoid these anti-patterns:
 - treating stale plan docs as source-of-truth over tests and code
 - running full benchmarks for every tiny edit
 - letting long iterative context replace a crisp packet
+- waiting idly when the next credible parity gap is already visible
 
 ---
 
@@ -337,5 +449,13 @@ A loop is done only when:
 - the evaluator result is KEEP
 - tests or fixtures preserve the gain
 - backlog state is updated
+- the next action is clear (next gap / family closure / escalation)
 
 Until then, the work is still exploratory.
+
+---
+
+## See Also
+
+- `AUTOPILOT.md` — how to keep driving parity work without waiting for new prompts
+- `reports/loops/README.md` — loop report storage and template guidance

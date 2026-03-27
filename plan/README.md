@@ -29,6 +29,7 @@ veraPDF 소스 기반 포팅 시 **MPL-2.0 동일 라이센스** 적용.
   - 테스트, golden diff, benchmark subset 기반 게이팅
 
 상세 운영 규칙은 루트의 `LOOPS.md`를 따른다.
+자율 반복 실행(autopilot) 규칙은 루트의 `AUTOPILOT.md`를 따른다.
 
 ---
 
