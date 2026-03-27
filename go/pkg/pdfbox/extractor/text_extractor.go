@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"unicode"
 
 	"github.com/opendataloader-project/opendataloader-pdf-go/pkg/pdfbox/model"
 )
@@ -66,6 +67,9 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 			return
 		}
 		x, y := gs.ctm.transform(ts.textMatrix.E, ts.textMatrix.F)
+		if last := lastExtractedTextOnBaseline(out, pageIdx, y); last != nil {
+			text = foldLeadingBoundaryWhitespace(last, text)
+		}
 		// Effective font size = Tf size × text matrix horizontal scale.
 		// PDF stores the actual rendered size via the text matrix (e.g. "10 0 0 10 x y Tm"
 		// with "/F1 1 Tf" means rendered size = 1 × 10 = 10pt). Without this, all
@@ -73,6 +77,14 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 		effectiveSize := ts.fontSize * math.Sqrt(ts.textMatrix.A*ts.textMatrix.A+ts.textMatrix.B*ts.textMatrix.B)
 		if effectiveSize <= 0 {
 			effectiveSize = ts.fontSize
+		}
+		if strings.TrimSpace(text) == "" {
+			if last := lastExtractedTextOnBaseline(out, pageIdx, y); last != nil {
+				last.Text += text
+				last.Width = textWidthEstimate(last.Text, last.FontSize)
+			}
+			ts.textMatrix = ts.textMatrix.translate(float64(len([]rune(text)))*ts.fontSize*0.5, 0)
+			return
 		}
 		width := textWidthEstimate(text, effectiveSize)
 		out = append(out, &ExtractedText{
@@ -216,4 +228,33 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 		return nil, fmt.Errorf("invalid page index")
 	}
 	return out, nil
+}
+
+func lastExtractedTextOnBaseline(out []*ExtractedText, pageIdx int, baseline float64) *ExtractedText {
+	if len(out) == 0 {
+		return nil
+	}
+	last := out[len(out)-1]
+	if last == nil || last.Page != pageIdx {
+		return nil
+	}
+	if math.Abs(last.Baseline-baseline) > 0.5 {
+		return nil
+	}
+	return last
+}
+
+func foldLeadingBoundaryWhitespace(last *ExtractedText, text string) string {
+	if last == nil || text == "" {
+		return text
+	}
+	leading := text[:len(text)-len(strings.TrimLeftFunc(text, unicode.IsSpace))]
+	if leading == "" || len(leading) == len(text) {
+		return text
+	}
+	if tail, _ := utf8LastRuneInString(last.Text); !unicode.IsSpace(tail) {
+		last.Text += leading
+		last.Width = textWidthEstimate(last.Text, last.FontSize)
+	}
+	return text[len(leading):]
 }

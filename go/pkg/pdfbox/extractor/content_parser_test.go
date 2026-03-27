@@ -93,6 +93,45 @@ func TestExtractTextChunksPreservesTrailingSpace(t *testing.T) {
 	assert.Equal(t, "World", chunks[1].Text)
 }
 
+func TestExtractTextChunksFoldsWhitespaceOnlyBoundaryRunIntoPreviousChunk(t *testing.T) {
+	pdf := writeTextPDF(t, "BT /F1 12 Tf 72 400 Td (Hello) Tj ( ) Tj (World) Tj ET\n")
+	doc, err := model.Open(pdf, "")
+	require.NoError(t, err)
+	defer doc.Close()
+
+	chunks, err := ExtractTextChunks(doc, 0)
+	require.NoError(t, err)
+	require.Len(t, chunks, 2)
+	assert.Equal(t, "Hello ", chunks[0].Text)
+	assert.Equal(t, "World", chunks[1].Text)
+}
+
+func TestExtractTextChunksFoldsLeadingBoundarySpaceIntoPreviousChunk(t *testing.T) {
+	pdf := writeTextPDF(t, "BT /F1 12 Tf 72 400 Td (Hello) Tj ( World) Tj ET\n")
+	doc, err := model.Open(pdf, "")
+	require.NoError(t, err)
+	defer doc.Close()
+
+	chunks, err := ExtractTextChunks(doc, 0)
+	require.NoError(t, err)
+	require.Len(t, chunks, 2)
+	assert.Equal(t, "Hello ", chunks[0].Text)
+	assert.Equal(t, "World", chunks[1].Text)
+}
+
+func TestExtractTextChunksAvoidsDuplicatingBoundarySpaceAcrossRuns(t *testing.T) {
+	pdf := writeTextPDF(t, "BT /F1 12 Tf 72 400 Td (Hello ) Tj ( World) Tj ET\n")
+	doc, err := model.Open(pdf, "")
+	require.NoError(t, err)
+	defer doc.Close()
+
+	chunks, err := ExtractTextChunks(doc, 0)
+	require.NoError(t, err)
+	require.Len(t, chunks, 2)
+	assert.Equal(t, "Hello ", chunks[0].Text)
+	assert.Equal(t, "World", chunks[1].Text)
+}
+
 func TestExtractTextChunksRecoversSpaceFromTJOffsets(t *testing.T) {
 	pdf := writeTextPDF(t, "BT /F1 12 Tf 72 400 Td [(A)-250(Multi-Object)-250(Rectified)-250(Attention)-250(Network)] TJ ET\n")
 	doc, err := model.Open(pdf, "")
