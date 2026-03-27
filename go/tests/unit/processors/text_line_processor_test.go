@@ -98,7 +98,7 @@ func TestTextLineProcessorSuppressesIntrawordSpaceAfterSingleLowercaseFragment(t
 	lines := processor.Process(chunks, nil, ctx)
 
 	assert.Len(t, lines, 1)
-	assert.Equal(t, "we thus propose a multi-objectrectiﬁed attention", lines[0].GetText())
+	assert.Equal(t, "we thus propose a multi-object rectiﬁed attention", lines[0].GetText())
 	assert.NotContains(t, lines[0].GetText(), "m ulti-")
 	assert.NotContains(t, lines[0].GetText(), "multi- object")
 	assert.NotContains(t, lines[0].GetText(), "objectr ectiﬁed")

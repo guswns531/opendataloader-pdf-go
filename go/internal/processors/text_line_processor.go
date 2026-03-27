@@ -110,7 +110,8 @@ func addSyntheticSpacing(chunks []*entities.TextChunk) []*entities.TextChunk {
 		current := chunks[i]
 		currentStart := current.BBox.X
 		gap := currentStart - previousEnd
-		if shouldInsertSyntheticSpace(previous, current, gap, avgCharWidth, spaceThreshold) {
+		if shouldInsertSyntheticSpaceBeforeSingletonContinuation(chunks, i, previousEnd, avgCharWidth, spaceThreshold) ||
+			shouldInsertSyntheticSpace(previous, current, gap, avgCharWidth, spaceThreshold) {
 			spacingText := " "
 			if gap > tabThreshold {
 				spacingText = "\t"
@@ -134,6 +135,39 @@ func addSyntheticSpacing(chunks []*entities.TextChunk) []*entities.TextChunk {
 	}
 
 	return result
+}
+
+func shouldInsertSyntheticSpaceBeforeSingletonContinuation(chunks []*entities.TextChunk, idx int, previousEnd, avgCharWidth, spaceThreshold float64) bool {
+	if idx <= 0 || idx+1 >= len(chunks) {
+		return false
+	}
+	previous := chunks[idx-1]
+	current := chunks[idx]
+	next := chunks[idx+1]
+	if previous == nil || current == nil || next == nil {
+		return false
+	}
+	currentRune, ok := singleNonSpaceRune(current)
+	if !ok || !unicode.IsLower(currentRune) {
+		return false
+	}
+	nextRune, ok := firstNonSpaceRune(next)
+	if !ok || !unicode.IsLower(nextRune) || trimmedRuneCount(next) <= 1 {
+		return false
+	}
+	prevRune, ok := lastNonSpaceRune(previous)
+	if !ok || !isWordBoundaryRune(prevRune) || prevRune == '-' {
+		return false
+	}
+	prevGap := current.BBox.X - previousEnd
+	if prevGap <= 0 || prevGap > avgCharWidth*textLineWordBoundaryRatio {
+		return false
+	}
+	nextGap := next.BBox.X - (current.BBox.X + current.BBox.Width)
+	if nextGap <= 0 {
+		return false
+	}
+	return nextGap > spaceThreshold || looksLikeInlineWordBoundary(current, next)
 }
 
 func shouldInsertSyntheticSpace(previous, current *entities.TextChunk, gap, avgCharWidth, spaceThreshold float64) bool {

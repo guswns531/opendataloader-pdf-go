@@ -146,8 +146,11 @@ func TestProcessJavaDocumentSuppressesIntrawordSyntheticSpacesInFixture(t *testi
 		t.Fatalf("Generate() error = %v", err)
 	}
 
-	if !strings.Contains(output, "we thus propose a multi-objectrectiﬁed attention network") {
-		t.Fatalf("expected fixture output to suppress intra-word synthetic spaces, got %q", output)
+	if !strings.Contains(output, "we thus propose a multi-object rectiﬁed attention network") {
+		t.Fatalf("expected fixture output to preserve boundary space before rectiﬁed, got %q", output)
+	}
+	if strings.Contains(output, "multi-objectrectiﬁed") {
+		t.Fatalf("unexpected joined rectiﬁed boundary in output: %q", output)
 	}
 	if strings.Contains(output, "m ulti-") || strings.Contains(output, "multi- object") || strings.Contains(output, "objectr ectiﬁed") || strings.Contains(output, "a ttention") {
 		t.Fatalf("unexpected intra-word synthetic spacing in output: %q", output)
