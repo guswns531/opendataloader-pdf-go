@@ -80,8 +80,7 @@ func ExtractTextChunks(doc *model.PDDocument, pageIdx int) ([]*ExtractedText, er
 		}
 		if strings.TrimSpace(text) == "" {
 			if last := lastExtractedTextOnBaseline(out, pageIdx, y); last != nil {
-				last.Text += text
-				last.Width = textWidthEstimate(last.Text, last.FontSize)
+				appendBoundaryWhitespace(last, text)
 			}
 			ts.textMatrix = ts.textMatrix.translate(float64(len([]rune(text)))*ts.fontSize*0.5, 0)
 			return
@@ -257,4 +256,15 @@ func foldLeadingBoundaryWhitespace(last *ExtractedText, text string) string {
 		last.Width = textWidthEstimate(last.Text, last.FontSize)
 	}
 	return text[len(leading):]
+}
+
+func appendBoundaryWhitespace(last *ExtractedText, text string) {
+	if last == nil || text == "" {
+		return
+	}
+	if tail, _ := utf8LastRuneInString(last.Text); unicode.IsSpace(tail) {
+		return
+	}
+	last.Text += text
+	last.Width = textWidthEstimate(last.Text, last.FontSize)
 }
