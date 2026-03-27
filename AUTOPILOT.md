@@ -246,22 +246,21 @@ without pretending every edge case in the universe is solved.
 
 ## Default next-gap strategy for this repository
 
-Until better evidence overrides it:
+Until better evidence overrides it, use **Plan A ordering**:
 
-1. finish `T16` text-parity family first
-2. then move into `T17` reading-order family
-3. then use benchmark diffs to discover the next highest-value parity gaps
+1. audit whether base-layer extractor semantics still reflect `pdfcpu` rather than Apache PDFBox
+2. run direct-port packets for the highest-impact low-level extractor behaviors
+3. only then continue upper-layer `T16` / `T17` cleanup with the new evidence
+4. use benchmark diffs to discover the next highest-value parity gaps
 
-Preferred sequence:
+Preferred sequence under Plan A:
 
-- `GAP-TEXT-TJ-OFFSET`
-- `GAP-TEXT-TRIMSPACE`
-- `GAP-TEXT-WINANSI`
-- `GAP-TEXT-TOUNICODE`
-- `GAP-RO-TWO-COLUMN-BASIC`
-- `GAP-RO-BALANCED-COLUMNS`
-- `GAP-RO-SIDEBAR-MIXED-LAYOUT`
-- `GAP-RO-XYCUT-DEPTH-STABILITY`
+- `AUDIT-PDFCPU-DEPENDENCY.md`
+- `AUDIT-T13-T17-REOPEN.md`
+- `PORT-PDFBOX-TEXT-SHOWING-OPERATORS`
+- `PORT-PDFBOX-TEXT-POSITION-GEOMETRY`
+- `PORT-PDFBOX-LINE-ART-GRAPHICS-EXTRACTION`
+- then remaining `T16` / `T17` family gaps
 
 ---
 

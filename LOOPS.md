@@ -425,6 +425,19 @@ Avoid these anti-patterns:
 
 Immediate candidates already identified in this repo:
 
+### Plan A — direct-port migration first
+
+Before assuming remaining failures belong only to upper-layer gaps, first consider whether the base extractor still reflects `pdfcpu` semantics instead of Apache PDFBox semantics.
+
+Priority direct-port audit areas:
+
+- `T13` / `pkg/pdfbox/extractor/*`
+- `T15` / pipeline assumptions on current extractor output
+- text-showing operators and chunk geometry
+- line-art / low-level table cues
+
+### Active gap families on top of that
+
 - text extraction parity (`T16` family)
   - TJ spacing
   - TrimSpace behavior

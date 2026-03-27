@@ -7,6 +7,13 @@ veraPDF 소스 기반 포팅 시 **MPL-2.0 동일 라이센스** 적용.
 
 이 레포는 단순 기능 개발 레포가 아니라, **Java 구현을 기준(reference)으로 Go 구현의 parity를 단계적으로 높이는 포팅 시스템**으로 운영한다.
 
+현재 전략은 **Plan A**를 우선 채택한다:
+
+> `pdfcpu` 적응층을 계속 미세조정하는 대신, `pkg/pdfbox/` 내부를 점진적으로 **Apache PDFBox direct-port semantics** 중심으로 재정렬한다.
+
+즉 이 프로젝트는 앞으로 `pdfcpu-backed PDFBox adapter`를 다듬는 데 머무르지 않고,
+벤치마크 영향이 큰 저수준 extraction semantics부터 **직접 포팅 기반으로 교체**해 나간다.
+
 ---
 
 ## 운영 모델
