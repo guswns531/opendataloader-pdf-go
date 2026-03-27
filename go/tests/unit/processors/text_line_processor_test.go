@@ -98,6 +98,35 @@ func TestTextLineProcessorRestoresBenchmarkDenseWordJoins(t *testing.T) {
 	assert.Equal(t, "Growth and the Creation of Life", lines[0].GetText())
 }
 
+func TestTextLineProcessorRestoresBenchmarkDenseProseSpacing(t *testing.T) {
+	processor := &processors.TextLineProcessor{}
+	ctx := containers.NewProcessorContext()
+	chunks := []*entities.TextChunk{
+		newTextChunk("One", 10.00, 100, 15.5, 10, 12, 100),
+		newTextChunk("of", 25.68, 100, 10.0, 10, 12, 100),
+		newTextChunk("the", 35.86, 100, 15.0, 10, 12, 100),
+		newTextChunk("characteristics", 51.04, 100, 74.0, 10, 12, 100),
+		newTextChunk("of", 125.22, 100, 10.0, 10, 12, 100),
+		newTextChunk("living", 135.40, 100, 31.0, 10, 12, 100),
+		newTextChunk("things", 166.58, 100, 33.0, 10, 12, 100),
+		newTextChunk("is", 199.76, 100, 8.0, 10, 12, 100),
+		newTextChunk("the", 207.94, 100, 15.0, 10, 12, 100),
+		newTextChunk("ability", 223.12, 100, 30.0, 10, 12, 100),
+		newTextChunk("to", 253.48, 100, 9.0, 10, 12, 100),
+		newTextChunk("replicate", 262.66, 100, 38.0, 10, 12, 100),
+		newTextChunk("and", 300.84, 100, 16.0, 10, 12, 100),
+		newTextChunk("pass", 317.02, 100, 18.0, 10, 12, 100),
+		newTextChunk("on", 335.20, 100, 10.0, 10, 12, 100),
+		newTextChunk("genetic", 345.56, 100, 31.0, 10, 12, 100),
+		newTextChunk("information", 376.74, 100, 53.0, 10, 12, 100),
+	}
+
+	lines := processor.Process(chunks, nil, ctx)
+
+	assert.Len(t, lines, 1)
+	assert.Equal(t, "One of the characteristics of living things is the ability to replicate and pass on genetic information", lines[0].GetText())
+}
+
 func TestTextLineProcessorSuppressesIntrawordSpaceAfterSingleLowercaseFragment(t *testing.T) {
 	processor := &processors.TextLineProcessor{}
 	ctx := containers.NewProcessorContext()

@@ -19,6 +19,8 @@ const (
 	textLineSpaceRatio        = 0.3
 	textLineTabRatio          = 2.0
 	textLineWordBoundaryRatio = 0.05
+	textLineDenseProseRatio   = 0.03
+	textLineWordOverlapRatio  = 0.08
 	listLabelHeightEpsilon    = 1.5
 	lineArtBulletGapMax       = 20.0
 	lineArtBaselineTolerance  = 5.0
@@ -171,22 +173,43 @@ func shouldInsertSyntheticSpaceBeforeSingletonContinuation(chunks []*entities.Te
 }
 
 func shouldInsertSyntheticSpace(previous, current *entities.TextChunk, gap, avgCharWidth, spaceThreshold float64) bool {
-	if gap <= 0 {
-		return false
-	}
 	if looksLikeHyphenatedContinuation(previous, current) {
 		return false
 	}
 	if looksLikeLowercaseContinuationFragment(previous, current) {
 		return false
 	}
+	if gap <= 0 {
+		if !looksLikeInlineWordBoundary(previous, current) || !isRecoverableWordOverlap(gap, avgCharWidth) {
+			return false
+		}
+		gap = 0
+	}
 	if gap > spaceThreshold {
 		return true
 	}
-	if avgCharWidth <= 0 || gap <= avgCharWidth*textLineWordBoundaryRatio {
+	if avgCharWidth <= 0 {
+		return false
+	}
+	boundaryRatio := textLineWordBoundaryRatio
+	if looksLikeDenseProseWordBoundary(previous, current) {
+		boundaryRatio = textLineDenseProseRatio
+	}
+	if gap <= avgCharWidth*boundaryRatio {
 		return false
 	}
 	return looksLikeInlineWordBoundary(previous, current)
+}
+
+func isRecoverableWordOverlap(gap, avgCharWidth float64) bool {
+	if gap >= 0 {
+		return true
+	}
+	if avgCharWidth <= 0 {
+		return false
+	}
+	overlapTolerance := math.Min(avgCharWidth*textLineWordOverlapRatio, 0.5)
+	return math.Abs(gap) <= overlapTolerance
 }
 
 func looksLikeInlineWordBoundary(previous, current *entities.TextChunk) bool {
@@ -199,6 +222,13 @@ func looksLikeInlineWordBoundary(previous, current *entities.TextChunk) bool {
 		return false
 	}
 	return isWordBoundaryRune(prevRune) && isWordBoundaryRune(nextRune)
+}
+
+func looksLikeDenseProseWordBoundary(previous, current *entities.TextChunk) bool {
+	if !looksLikeInlineWordBoundary(previous, current) {
+		return false
+	}
+	return trimmedRuneCount(previous) > 1 && trimmedRuneCount(current) > 1
 }
 
 func looksLikeLowercaseContinuationFragment(previous, current *entities.TextChunk) bool {
