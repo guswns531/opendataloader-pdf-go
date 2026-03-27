@@ -286,24 +286,45 @@ func foldLeadingBoundaryWhitespace(last *ExtractedText, text string) string {
 	if last == nil || text == "" {
 		return text
 	}
-	leading := text[:len(text)-len(strings.TrimLeftFunc(text, unicode.IsSpace))]
+	trimmed := strings.TrimLeftFunc(text, unicode.IsSpace)
+	leading := text[:len(text)-len(trimmed)]
 	if leading == "" || len(leading) == len(text) {
 		return text
 	}
+	boundary := normalizeBoundaryWhitespace(leading)
+	if boundary == "" {
+		return trimmed
+	}
 	if tail, _ := utf8LastRuneInString(last.Text); !unicode.IsSpace(tail) {
-		last.Text += leading
+		last.Text += boundary
 		last.Width = textWidthEstimate(last.Text, last.FontSize)
 	}
-	return text[len(leading):]
+	return trimmed
 }
 
 func appendBoundaryWhitespace(last *ExtractedText, text string) {
 	if last == nil || text == "" {
 		return
 	}
+	boundary := normalizeBoundaryWhitespace(text)
+	if boundary == "" {
+		return
+	}
 	if tail, _ := utf8LastRuneInString(last.Text); unicode.IsSpace(tail) {
 		return
 	}
-	last.Text += text
+	last.Text += boundary
 	last.Width = textWidthEstimate(last.Text, last.FontSize)
+}
+
+func normalizeBoundaryWhitespace(text string) string {
+	for _, r := range text {
+		if !unicode.IsSpace(r) {
+			return ""
+		}
+	}
+	if text == "" {
+		return ""
+	}
+	return " "
 }
